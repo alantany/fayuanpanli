@@ -1,4 +1,6 @@
 sentence-transformers
-faiss-cpu
 pdfplumber
-flask 
+flask
+chromadb
+tqdm
+pypinyin 

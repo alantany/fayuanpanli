@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>法院判例知识库搜索</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .result-item {
+            background-color: #e9ecef;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+        }
+        .result-item h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .result-item pre {
+            white-space: pre-wrap; /* css-3 */
+            white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+            white-space: -pre-wrap; /* Opera 4-6 */
+            white-space: -o-pre-wrap; /* Opera 7 */
+            word-wrap: break-word; /* Internet Explorer 5.5+ */
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            max-height: 300px; /* 限制内容最大高度，可滚动 */
+            overflow-y: auto;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>法院判例知识库搜索</h1>
+        
+        <form id="searchForm">
+            <label for="case_type_folder">选择案例类型:</label>
+            <select name="case_type_folder" id="case_type_folder">
+                {% for display_name, folder_name in case_types.items() %}
+                    <option value="{{ folder_name }}">{{ display_name }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="query">输入搜索关键词:</label>
+            <input type="text" id="query" name="query" required>
+            
+            <button type="submit">搜索</button>
+        </form>
+
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        document.getElementById('searchForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const query = document.getElementById('query').value;
+            const case_type_folder = document.getElementById('case_type_folder').value;
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = '<p>正在搜索中...</p>';
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'query': query,
+                        'case_type_folder': case_type_folder
+                    })
+                });
+
+                const data = await response.json();
+                resultsDiv.innerHTML = ''; // 清空旧结果
+
+                if (response.ok) {
+                    if (data.error) {
+                         resultsDiv.innerHTML = `<p class="error">搜索出错: ${data.error}</p>`;
+                         if(data.debug_collection_name){
+                            resultsDiv.innerHTML += `<p>尝试搜索的集合: ${data.debug_collection_name}</p>`;
+                         }
+                    } else if (data.results && data.results.length > 0) {
+                        data.results.forEach(item => {
+                            const resultItemDiv = document.createElement('div');
+                            resultItemDiv.classList.add('result-item');
+                            
+                            const title = document.createElement('h3');
+                            title.textContent = item.filename || '未知文件'; // 使用元数据中的文件名
+                            resultItemDiv.appendChild(title);
+                            
+                            const content = document.createElement('pre');
+                            content.textContent = item.document;
+                            resultItemDiv.appendChild(content);
+                            
+                            resultsDiv.appendChild(resultItemDiv);
+                        });
+                    } else {
+                        resultsDiv.innerHTML = '<p>没有找到相关结果。</p>';
+                        if(data.debug_collection_name){
+                             resultsDiv.innerHTML += `<p>搜索的集合: ${data.debug_collection_name}</p>`;
+                         }
+                    }
+                } else {
+                    resultsDiv.innerHTML = `<p class="error">请求错误: ${data.error || response.statusText}</p>`;
+                    if(data.debug_collection_name){
+                        resultsDiv.innerHTML += `<p>尝试搜索的集合: ${data.debug_collection_name}</p>`;
+                    }
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="error">发生JavaScript错误: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html> 
