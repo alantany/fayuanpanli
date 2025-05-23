@@ -1,0 +1,27 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 判例PDF批量提取与分割规则
+
+本项目核心脚本为 [extract_cases.py](mdc:extract_cases.py)，用于将法院判例PDF或已提取的all_cases.txt批量分割为单独的案例txt文件。
+
+## 主要功能
+- 支持直接从PDF文件（指定正文起始页）提取全部判例文本，并自动去除页眉。
+- 支持从已生成的all_cases.txt文件中，按案例分割为单独txt文件。
+- 案例文件名自动提取案例名，去除编号、特殊符号，最长50字符，防止重名。
+
+## 用法
+- 提取PDF正文并分割：
+  ```bash
+  python extract_cases.py <pdf文件名> <正文起始页(从1开始)>
+  # 示例：python extract_cases.py 民事案件.pdf 189
+  ```
+- 仅分割已存在的all_cases.txt：
+  ```bash
+  python extract_cases.py 民事案例/all_cases.txt
+  ```
+
+## 输出目录
+- 分割后的案例文件保存在对应目录下的cases/子目录中。
