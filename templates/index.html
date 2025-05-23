@@ -73,6 +73,23 @@
             color: #90caf9; /* Lighter blue for filename */
         }
 
+        .case-section-title {
+            font-size: 1.15em;
+            color: #FFCA28;
+            font-weight: 600;
+        }
+
+        .system-message strong.case-section-title {
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .system-message pre .case-section-title {
+            /* display: block;
+            margin-top: 0.5em;
+            margin-bottom: 0.2em; */
+        }
+
         .system-message pre {
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -80,7 +97,7 @@
             padding: 10px;
             border-radius: 6px;
             border: 1px solid #2A3B4D;
-            max-height: 250px;
+            max-height: 350px;
             overflow-y: auto;
             font-size: 0.9em;
             color: #c5c5c5; 
@@ -226,37 +243,85 @@
     </div>
 
     <script>
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                console.warn('escapeHtml called with non-string value:', unsafe);
+                return String(unsafe);
+            }
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function escapeRegex(string) {
+            if (typeof string !== 'string') {
+                console.warn('escapeRegex called with non-string value:', string);
+                return String(string);
+            }
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
         const chatContainer = document.getElementById('chatContainer');
         const queryInput = document.getElementById('queryInput');
         const sendButton = document.getElementById('sendButton');
         const caseTypeSelect = document.getElementById('case_type_folder_select');
         const emptyChatPlaceholder = document.getElementById('emptyChatPlaceholder');
-        let loadingMessageElement = null; 
 
-        function addMessage(text, type, isHtml = false) {
+        function displayUserMessage(queryText) {
+            if (emptyChatPlaceholder) {
+                emptyChatPlaceholder.style.display = 'none';
+            }
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', 'user-message');
+            messageDiv.textContent = queryText;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function displaySystemMessage(message, isError = false) {
             if (emptyChatPlaceholder && emptyChatPlaceholder.style.display !== 'none') {
                 emptyChatPlaceholder.style.display = 'none'; 
             }
 
             const messageDiv = document.createElement('div');
-            messageDiv.classList.add('message', type); 
+            messageDiv.classList.add('message', isError ? 'error-message' : 'system-message');
             
-            if (isHtml) {
-                messageDiv.innerHTML = text;
+            if (typeof message === 'object' && message !== null && message.filename && message.document) {
+                const strong = document.createElement('strong');
+                strong.textContent = message.filename;
+                messageDiv.appendChild(strong);
+
+                const pre = document.createElement('pre');
+                let documentContent = message.document;
+                
+                const basicInfoMarker = "基本案情";
+                const startIndex = documentContent.indexOf(basicInfoMarker);
+
+                if (startIndex !== -1) {
+                    documentContent = documentContent.substring(startIndex);
+                }
+
+                const titlesToHighlight = ["关键词", "基本案情", "裁判理由", "关联索引", "裁判要旨"];
+                let processedContent = escapeHtml(documentContent);
+
+                titlesToHighlight.forEach(title => {
+                    const regex = new RegExp(`(^|\n)([\s]*${escapeRegex(title)}[\s]*)(?=\n|$)`, 'g');
+                    processedContent = processedContent.replace(regex, (match, p1, p2) => {
+                        return `${p1}<span class="case-section-title">${p2.trim()}</span>`;
+                    });
+                });
+                
+                pre.innerHTML = processedContent;
+                messageDiv.appendChild(pre);
+
             } else {
-                messageDiv.textContent = text;
+                messageDiv.textContent = message;
             }
-            
             chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight; 
-            return messageDiv; 
-        }
-        
-        function removeLoadingMessage() {
-            if (loadingMessageElement && loadingMessageElement.parentNode) {
-                loadingMessageElement.remove();
-                loadingMessageElement = null;
-            }
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         async function handleSearch() {
@@ -264,15 +329,12 @@
             const caseTypeFolder = caseTypeSelect.value;
 
             if (!query) {
-                addMessage("请输入搜索关键词。", "error-message");
+                displaySystemMessage("请输入搜索关键词。", true);
                 return;
             }
 
-            addMessage(query, "user-message"); 
+            displayUserMessage(query);
             queryInput.value = ''; 
-            
-            removeLoadingMessage(); 
-            loadingMessageElement = addMessage("正在检索中，请稍候...", "loading-message");
 
             try {
                 const response = await fetch('/search', {
@@ -286,28 +348,23 @@
                     })
                 });
                 
-                removeLoadingMessage(); 
-
                 const data = await response.json();
 
                 if (response.ok) {
                     if (data.error) {
-                        addMessage(`检索出错: ${data.error}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, "error-message");
+                        displaySystemMessage(`检索出错: ${data.error}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
                     } else if (data.results && data.results.length > 0) {
                         data.results.forEach(item => {
-                            const resultContent = `<strong>${item.filename || '未知文件'}</strong><pre>${item.document}</pre>`;
-                            addMessage(resultContent, "system-message", true);
+                            displaySystemMessage(item, false);
                         });
                     } else {
-                        addMessage(`没有找到与 "${query}" 相关的结果。 ${data.debug_collection_name ? '\n(搜索的集合: ' + data.debug_collection_name + ')' : ''}`, "info-message"); 
+                        displaySystemMessage(`没有找到与 "${query}" 相关的结果。 ${data.debug_collection_name ? '\n(搜索的集合: ' + data.debug_collection_name + ')' : ''}`, false); 
                     }
                 } else {
-                     addMessage(`请求错误: ${data.error || response.statusText}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, "error-message");
+                     displaySystemMessage(`请求错误: ${data.error || response.statusText}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
                 }
             } catch (error) {
-                addMessage(`发生JavaScript错误: ${error.message}`, "error-message");
-            } finally {
-                 removeLoadingMessage(); 
+                displaySystemMessage(`发生JavaScript错误: ${error.message}`, true);
             }
         }
 

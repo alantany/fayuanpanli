@@ -171,17 +171,17 @@ def process_and_store_cases(case_type_display_name, case_type_folder_name):
     
     # Check for already processed files to avoid re-processing if script is run multiple times
     # This is a simple check; for very large datasets, a more robust checkpointing might be needed.
-    try:
-        existing_ids = set(collection.get(include=[])['ids']) # Get all existing IDs
-        print(f"Found {len(existing_ids)} existing documents in collection '{collection_name}'. Will skip them.")
-    except Exception as e:
-        print(f"Warning: Could not retrieve existing IDs from collection '{collection_name}': {e}. Will proceed to add all documents.")
-        existing_ids = set()
+    # try:
+    #     existing_ids = set(collection.get(include=[])['ids']) # Get all existing IDs
+    #     print(f"Found {len(existing_ids)} existing documents in collection '{collection_name}'. Will skip them.")
+    # except Exception as e:
+    #     print(f"Warning: Could not retrieve existing IDs from collection '{collection_name}': {e}. Will proceed to add all documents.")
+    #     existing_ids = set()
 
     for filename in tqdm(filenames, desc=f"Processing {case_type_display_name}"):
-        if filename in existing_ids:
-            # print(f"Skipping {filename} as it already exists in the collection.")
-            continue
+        # if filename in existing_ids:
+        #     # print(f"Skipping {filename} as it already exists in the collection.")
+        #     continue
 
         filepath = os.path.join(cases_dir, filename)
         try:
