@@ -127,7 +127,7 @@ def search():
         
         query_results = collection.query(
             query_texts=[query_text],
-            n_results=5, # 返回最相关的5个结果
+            n_results=1, # 返回最相关的5个结果
             include=["metadatas", "documents"] # 包含元数据和文档内容
         )
         

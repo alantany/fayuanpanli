@@ -64,12 +64,14 @@
             align-self: flex-start; 
             border: 1px solid #384a5c;
             border-bottom-left-radius: 4px;
+            max-width: 50%; /* System message width is half of the screen */
+            position: relative; /* Added for positioning the copy button */
         }
         
         .system-message strong {
             display: block;
             margin-bottom: 8px;
-            font-size: 1.05em;
+            font-size: 1.25em;
             color: #90caf9; /* Lighter blue for filename */
         }
 
@@ -99,7 +101,7 @@
             border: 1px solid #2A3B4D;
             max-height: 350px;
             overflow-y: auto;
-            font-size: 0.9em;
+            font-size: 1.25em;
             color: #c5c5c5; 
         }
         
@@ -216,6 +218,43 @@
             fill: currentColor;
         }
 
+        .copy-case-button {
+            position: absolute;
+            top: 10px; 
+            right: 10px; 
+            background-color: #384a5c; 
+            color: #e0e0e0;
+            border: 1px solid #4a5b6d; 
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0.7; 
+            line-height: 1; 
+            z-index: 10;
+        }
+
+        .system-message:hover .copy-case-button {
+            opacity: 1; 
+        }
+
+        .copy-case-button:hover {
+            background-color: #4a5b6d; 
+            border-color: #5a6b7d;
+        }
+
+        .copy-case-button.copied {
+            background-color: #28a745; 
+            color: white;
+            border-color: #1e7e34;
+            opacity: 1;
+        }
+
+        .copy-case-button.copied:hover {
+            background-color: #218838; 
+        }
+
     </style>
 </head>
 <body>
@@ -290,19 +329,55 @@
             messageDiv.classList.add('message', isError ? 'error-message' : 'system-message');
             
             if (typeof message === 'object' && message !== null && message.filename && message.document) {
+                let textToCopy = message.document; // Will be updated if "基本案情" is found
+
                 const strong = document.createElement('strong');
-                strong.textContent = message.filename;
+                let displayName = message.filename;
+                if (displayName && displayName.endsWith('.txt')) {
+                    displayName = displayName.substring(0, displayName.length - 4);
+                }
+                strong.textContent = displayName;
                 messageDiv.appendChild(strong);
 
+                // Create and append Copy Button
+                const copyButton = document.createElement('button');
+                copyButton.classList.add('copy-case-button');
+                copyButton.innerHTML = '&#x1F4CB;'; // Clipboard unicode icon (📝)
+                copyButton.title = '复制案例内容';
+                messageDiv.appendChild(copyButton); // Append early, CSS handles positioning
+
                 const pre = document.createElement('pre');
-                let documentContent = message.document;
+                let documentContent = message.document; // Original full content for processing
                 
                 const basicInfoMarker = "基本案情";
                 const startIndex = documentContent.indexOf(basicInfoMarker);
 
                 if (startIndex !== -1) {
-                    documentContent = documentContent.substring(startIndex);
+                    documentContent = documentContent.substring(startIndex); // Potentially truncated
                 }
+                // Update textToCopy with the version that might start from "基本案情"
+                textToCopy = documentContent; 
+
+                // Add event listener to the copy button
+                copyButton.addEventListener('click', (event) => {
+                    event.stopPropagation(); // Prevent other clicks if messageDiv had listeners
+                    navigator.clipboard.writeText(textToCopy)
+                        .then(() => {
+                            copyButton.innerHTML = '&#x2714; 已复制'; // Checkmark icon + text
+                            copyButton.classList.add('copied');
+                            setTimeout(() => {
+                                copyButton.innerHTML = '&#x1F4CB;'; // Reset to clipboard icon
+                                copyButton.classList.remove('copied');
+                            }, 2000); // Reset after 2 seconds
+                        })
+                        .catch(err => {
+                            console.error('无法复制文本: ', err);
+                            copyButton.textContent = '失败'; // Show error on button
+                            setTimeout(() => {
+                                copyButton.innerHTML = '&#x1F4CB;'; // Reset to clipboard icon
+                            }, 2000);
+                        });
+                });
 
                 const titlesToHighlight = ["关键词", "基本案情", "裁判理由", "关联索引", "裁判要旨"];
                 let processedContent = escapeHtml(documentContent);
@@ -314,7 +389,18 @@
                     });
                 });
                 
-                pre.innerHTML = processedContent;
+                // Add indentation for paragraphs
+                let lines = processedContent.split('\n');
+                let indentedContent = lines.map(line => {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.length > 0 && !trimmedLine.startsWith('<span class="case-section-title">')) {
+                        // Add two full-width spaces for indentation to the original line
+                        return '　　' + line;
+                    }
+                    return line;
+                }).join('\n');
+
+                pre.innerHTML = indentedContent;
                 messageDiv.appendChild(pre);
 
             } else {
