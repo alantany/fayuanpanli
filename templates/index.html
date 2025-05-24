@@ -255,6 +255,56 @@
             background-color: #218838; 
         }
 
+        .llm-analysis-container {
+            margin-top: 15px;
+            padding: 12px;
+            background-color: #1e2a38; /* Slightly different dark shade */
+            border: 1px dashed #384a5c;
+            border-radius: 8px;
+        }
+
+        .llm-analysis-container h4 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #FFCA28; /* Same as case-section-title for consistency */
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .llm-analysis-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #161F2A; /* Darker than its container */
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 1.25em; /* Match case document pre font size */
+            color: #d0d0d0;
+            max-height: 250px; /* Or as desired */
+            overflow-y: auto;
+            border: 1px solid #2A3B4D;
+        }
+
+        .llm-analyze-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+            transition: background-color 0.2s ease;
+        }
+
+        .llm-analyze-button:hover {
+            background-color: #0056b3;
+        }
+
+        .llm-analyze-button:disabled {
+            background-color: #5a6268;
+            cursor: not-allowed;
+        }
+
     </style>
 </head>
 <body>
@@ -309,6 +359,70 @@
         const caseTypeSelect = document.getElementById('case_type_folder_select');
         const emptyChatPlaceholder = document.getElementById('emptyChatPlaceholder');
 
+        const caseTitlesToHighlight = ["关键词", "基本案情", "裁判理由", "关联索引", "裁判要旨"];
+        const llmTitlesToHighlight = ["案情摘要", "争议焦点", "裁判理由", "法律适用", "判决结果分析", "案件启示", "相关法条"]; // Titles for LLM analysis
+
+        function formatAndIndentTextContent(text, titlesArray, shouldIndent) {
+            let processedText = escapeHtml(text);
+            titlesArray.forEach(title => {
+                const regex = new RegExp(`(^|\n)([\s]*${escapeRegex(title)}[\s]*)(?=\n|$)`, 'g');
+                processedText = processedText.replace(regex, (match, p1, p2) => {
+                    return `${p1}<span class="case-section-title">${p2.trim()}</span>`;
+                });
+            });
+
+            if (shouldIndent) {
+                let lines = processedText.split('\n');
+                processedText = lines.map(line => {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.length > 0 && !trimmedLine.startsWith('<span class="case-section-title">')) {
+                        return '　　' + line;
+                    }
+                    return line;
+                }).join('\n');
+            }
+            return processedText;
+        }
+
+        // New function specifically for formatting LLM analysis content
+        function formatLlmAnalysisContent(llmText, shouldIndent) {
+            if (typeof llmText !== 'string') {
+                console.warn('formatLlmAnalysisContent called with non-string value:', llmText);
+                return String(llmText); // Or handle as an error/empty string
+            }
+            // 1. Remove all ** markdown emphasis
+            let textWithoutMarkdownBold = llmText.replace(/\*\*/g, '');
+
+            // 2. HTML Escape the text
+            let processedText = escapeHtml(textWithoutMarkdownBold);
+
+            // 3. Process lines for ### / #### titles and indentation
+            let lines = processedText.split('\n');
+            let formattedLines = lines.map(line => {
+                const trimmedLine = line.trim();
+                let titleMatch;
+
+                // Check for #### Title first, then ### Title
+                if (trimmedLine.startsWith('#### ')) {
+                    titleMatch = trimmedLine.substring(5).trim(); // Get text after '#### '
+                    return `<span class="case-section-title">${titleMatch}</span>`;
+                } else if (trimmedLine.startsWith('### ')) {
+                    titleMatch = trimmedLine.substring(4).trim(); // Get text after '### '
+                    return `<span class="case-section-title">${titleMatch}</span>`;
+                }
+
+                // If not a title, apply indentation if needed
+                if (shouldIndent && trimmedLine.length > 0) {
+                    // We are working with already HTML-escaped lines.
+                    // Indentation should be applied to the original line if it wasn't a title.
+                    return '　　' + line; // Indent the original line (which is already escaped)
+                }
+                return line; // Return original (escaped) line if no transformation applied
+            });
+
+            return formattedLines.join('\n');
+        }
+
         function displayUserMessage(queryText) {
             if (emptyChatPlaceholder) {
                 emptyChatPlaceholder.style.display = 'none';
@@ -360,54 +474,109 @@
 
                 // Add event listener to the copy button
                 copyButton.addEventListener('click', (event) => {
-                    event.stopPropagation(); // Prevent other clicks if messageDiv had listeners
+                    event.stopPropagation(); 
                     navigator.clipboard.writeText(textToCopy)
                         .then(() => {
-                            copyButton.innerHTML = '&#x2714; 已复制'; // Checkmark icon + text
+                            copyButton.innerHTML = '&#x2714; 已复制'; 
                             copyButton.classList.add('copied');
                             setTimeout(() => {
-                                copyButton.innerHTML = '&#x1F4CB;'; // Reset to clipboard icon
+                                copyButton.innerHTML = '&#x1F4CB;'; 
                                 copyButton.classList.remove('copied');
-                            }, 2000); // Reset after 2 seconds
+                            }, 2000); 
                         })
                         .catch(err => {
                             console.error('无法复制文本: ', err);
-                            copyButton.textContent = '失败'; // Show error on button
+                            copyButton.textContent = '失败'; 
                             setTimeout(() => {
-                                copyButton.innerHTML = '&#x1F4CB;'; // Reset to clipboard icon
+                                copyButton.innerHTML = '&#x1F4CB;'; 
                             }, 2000);
                         });
                 });
 
-                const titlesToHighlight = ["关键词", "基本案情", "裁判理由", "关联索引", "裁判要旨"];
-                let processedContent = escapeHtml(documentContent);
-
-                titlesToHighlight.forEach(title => {
-                    const regex = new RegExp(`(^|\n)([\s]*${escapeRegex(title)}[\s]*)(?=\n|$)`, 'g');
-                    processedContent = processedContent.replace(regex, (match, p1, p2) => {
-                        return `${p1}<span class="case-section-title">${p2.trim()}</span>`;
-                    });
-                });
-                
-                // Add indentation for paragraphs
-                let lines = processedContent.split('\n');
-                let indentedContent = lines.map(line => {
-                    const trimmedLine = line.trim();
-                    if (trimmedLine.length > 0 && !trimmedLine.startsWith('<span class="case-section-title">')) {
-                        // Add two full-width spaces for indentation to the original line
-                        return '　　' + line;
-                    }
-                    return line;
-                }).join('\n');
-
-                pre.innerHTML = indentedContent;
+                // Format and display the main case document content
+                const formattedDocumentContent = formatAndIndentTextContent(documentContent, caseTitlesToHighlight, true);
+                pre.innerHTML = formattedDocumentContent;
                 messageDiv.appendChild(pre);
+
+                // Create and append "大模型分析" button
+                const analyzeButton = document.createElement('button');
+                analyzeButton.classList.add('llm-analyze-button');
+                analyzeButton.textContent = '大模型分析';
+                analyzeButton.addEventListener('click', (event) => {
+                    // Pass the original, non-truncated, non-HTML-escaped full document text for analysis
+                    handleLlmAnalysisClick(event, message.document, analyzeButton, messageDiv);
+                });
+                messageDiv.appendChild(analyzeButton);
 
             } else {
                 messageDiv.textContent = message;
             }
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function handleLlmAnalysisClick(event, caseDocumentText, buttonElement, messageContainerDiv) {
+            buttonElement.textContent = '分析中...';
+            buttonElement.disabled = true;
+
+            // Remove any existing LLM analysis container for this message if re-clicked
+            const existingAnalysisContainer = messageContainerDiv.querySelector('.llm-analysis-container');
+            if (existingAnalysisContainer) {
+                existingAnalysisContainer.remove();
+            }
+            // Remove any existing error message related to LLM for this message
+            const existingLlmError = messageContainerDiv.querySelector('.llm-error-message');
+            if (existingLlmError) {
+                existingLlmError.remove();
+            }
+
+            try {
+                const response = await fetch('/analyze_case_llm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 'case_document': caseDocumentText })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.analysis) {
+                    buttonElement.style.display = 'none'; // Hide the button after successful analysis
+
+                    const analysisContainer = document.createElement('div');
+                    analysisContainer.classList.add('llm-analysis-container');
+
+                    const analysisTitle = document.createElement('h4');
+                    analysisTitle.textContent = '大模型分析'; // User's preference (no colon)
+                    analysisContainer.appendChild(analysisTitle);
+
+                    const analysisPre = document.createElement('pre');
+                    // Format LLM analysis using the new dedicated function
+                    const formattedAnalysis = formatLlmAnalysisContent(data.analysis, true);
+                    analysisPre.innerHTML = formattedAnalysis;
+                    analysisContainer.appendChild(analysisPre);
+                    
+                    // Insert the analysis container after the main document's <pre> or where button was
+                    messageContainerDiv.appendChild(analysisContainer); 
+
+                } else {
+                    throw new Error(data.error || "LLM分析返回空内容或未知错误");
+                }
+            } catch (error) {
+                console.error("LLM Analysis Error:", error);
+                buttonElement.textContent = '分析失败 (重试)';
+                buttonElement.disabled = false;
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.classList.add('message', 'error-message', 'llm-error-message'); // Add specific class
+                errorDiv.style.marginTop = '10px';
+                errorDiv.style.alignSelf = 'flex-start'; // Align with system message
+                errorDiv.style.maxWidth = '100%'; // Allow it to take full width of parent
+                errorDiv.textContent = `大模型分析出错: ${error.message}`;
+                messageContainerDiv.appendChild(errorDiv);
+            }
+             chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to show new content
         }
 
         async function handleSearch() {

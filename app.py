@@ -6,11 +6,29 @@ from chromadb.utils import embedding_functions
 import os
 import re
 from pypinyin import pinyin, Style
+import requests # Added for LLM calls
+from dotenv import load_dotenv # Added to load .env file
 
 print("--- Imports completed ---")
 
+load_dotenv() # Load environment variables from .env file
+print("--- .env file loaded ---")
+
 app = Flask(__name__)
 print("--- Flask app initialized ---")
+
+# --- LLM Configuration ---
+LLM_API_URL = os.getenv("LLM_API_URL")
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")
+
+if not all([LLM_API_URL, LLM_API_KEY, LLM_MODEL_NAME]):
+    print("!!! WARNING: LLM configuration (API URL, Key, or Model Name) is missing from .env file. LLM analysis will be disabled. !!!")
+    LLM_ENABLED = False
+else:
+    LLM_ENABLED = True
+    print("--- LLM Configuration loaded successfully ---")
+
 
 # --- 从 vectorize_and_store.py 复制过来的配置和函数 ---
 CHROMA_DATA_PATH = "db/"
@@ -82,6 +100,73 @@ def get_clean_collection_name(case_type_folder_name_raw):
 
     return full_collection_name
 
+def analyze_case_with_llm(case_document):
+    """
+    Sends the case document to the LLM for analysis and returns the analysis.
+    """
+    if not LLM_ENABLED:
+        print("LLM analysis is disabled due to missing configuration.")
+        return "大模型分析未启用或配置不正确。"
+
+    print(f"--- Sending to LLM for analysis. Document starts with: {case_document[:200]}... ---")
+    
+    # Basic prompt, can be significantly improved with prompt engineering
+    # For Chinese text, it's good practice to be explicit if the model expects it.
+    # The DeepSeek model used is multilingual and good with Chinese.
+    prompt = f"请对以下法院判例内容进行分析和总结，提取关键信息，例如案情摘要、争议焦点、裁判理由等。请用中文回答。案例内容：\\n\\n{case_document}"
+
+    headers = {
+        "Authorization": f"Bearer {LLM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": LLM_MODEL_NAME,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 1024, # Adjust as needed
+        "temperature": 0.7   # Adjust for creativity vs. factuality
+    }
+
+    try:
+        response = requests.post(LLM_API_URL, headers=headers, json=data, timeout=90) # Increased timeout
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
+        
+        llm_response_data = response.json()
+        
+        # --- Log the raw LLM response for debugging ---
+        # print(f"LLM Raw Response: {llm_response_data}") 
+        # ---
+
+        if llm_response_data.get("choices") and llm_response_data["choices"][0].get("message"):
+            analysis = llm_response_data["choices"][0]["message"].get("content", "").strip()
+            print("--- LLM analysis received successfully. ---")
+            return analysis if analysis else "大模型返回了空的分析结果。"
+        else:
+            error_detail = llm_response_data.get("error", {}).get("message", "未知错误结构")
+            print(f"LLM API returned unexpected structure or no content: {error_detail}")
+            # print(f"Full LLM response for debugging unexpected structure: {llm_response_data}")
+            return f"大模型返回了意外的响应结构: {error_detail}"
+
+    except requests.exceptions.Timeout:
+        print("LLM API request timed out.")
+        return "请求大模型超时。"
+    except requests.exceptions.HTTPError as http_err:
+        error_content = "未知错误"
+        try:
+            error_content = response.json().get("error", {}).get("message", str(http_err))
+        except: # In case response is not JSON or structure is different
+            error_content = str(http_err)
+        print(f"LLM API request failed with HTTPError: {error_content}")
+        return f"请求大模型API失败: {error_content}"
+    except requests.exceptions.RequestException as e:
+        print(f"LLM API request failed: {str(e)}")
+        return f"请求大模型时发生网络错误: {str(e)}"
+    except Exception as e:
+        print(f"An unexpected error occurred during LLM analysis: {str(e)}")
+        return f"处理大模型分析时发生未知错误: {str(e)}"
+
+
 # --- 应用特定的配置 ---
 # 定义我们目前支持的案件类型 (显示名称, 用于生成集合名的文件夹名)
 AVAILABLE_CASE_TYPES = {
@@ -105,6 +190,32 @@ def index():
         init_chroma()
     return render_template('index.html', case_types=AVAILABLE_CASE_TYPES)
 
+@app.route('/analyze_case_llm', methods=['POST'])
+def analyze_case_llm_route():
+    print("--- Route /analyze_case_llm called ---")
+    if not LLM_ENABLED:
+        return jsonify({"error": "LLM analysis is disabled."}), 403 # Forbidden
+
+    data = request.get_json()
+    case_document = data.get('case_document')
+
+    if not case_document:
+        return jsonify({"error": "Missing case_document in request."}), 400
+
+    print(f"--- Received document for LLM analysis. Length: {len(case_document)} ---")
+    analysis_result = analyze_case_with_llm(case_document)
+    
+    # Check if the result indicates an error from analyze_case_with_llm
+    if any(err_msg in analysis_result for err_msg in ["大模型分析未启用", "请求大模型超时", "请求大模型API失败", "大模型返回了意外的响应结构", "处理大模型分析时发生未知错误"]):
+        # If it's an error message we constructed, return it with a 500 or appropriate status
+        # This helps differentiate actual LLM content from our error messages.
+        # However, the current analyze_case_with_llm returns strings directly. 
+        # For a more robust API, it should ideally return a structured error or success response.
+        # For now, we assume if it's one of these known error strings, it's an internal/API error.
+        return jsonify({"error": analysis_result}), 500 
+        
+    return jsonify({"analysis": analysis_result})
+
 @app.route('/search', methods=['POST'])
 def search():
     print("--- Route /search called ---")
@@ -120,35 +231,26 @@ def search():
 
     collection_name = get_clean_collection_name(case_type_folder)
     
-    results = []
+    results = [] # Changed back to just results, LLM analysis will be fetched on demand
     try:
         print(f"Searching in collection: {collection_name} for query: '{query_text}'")
-        collection = client.get_collection(name=collection_name, embedding_function=ef) # Pass ef here
+        collection = client.get_collection(name=collection_name, embedding_function=ef) 
         
         query_results = collection.query(
             query_texts=[query_text],
-            n_results=1, # 返回最相关的5个结果
-            include=["metadatas", "documents"] # 包含元数据和文档内容
+            n_results=1, 
+            include=["metadatas", "documents"] 
         )
         
-        #  query_results 结构示例 (根据ChromaDB版本可能略有不同):
-        # {
-        #     "ids": [["id1", "id2"]],
-        #     "distances": [[0.1, 0.2]],
-        #     "metadatas": [[{"filename": "file1.txt", "case_type": "..." }, {"filename": "file2.txt", ...}]],
-        #     "documents": [["doc content 1", "doc content 2"]],
-        #     "uris": None,
-        #     "data": None,
-        # }
-        # 我们只查询了一个文本，所以主要取第一个列表的元素
-
         if query_results and query_results.get("ids") and query_results.get("ids")[0]:
             for i in range(len(query_results["ids"][0])):
+                case_document_text = query_results["documents"][0][i]
+                # LLM analysis is no longer done here directly
                 result_item = {
                     "id": query_results["ids"][0][i],
                     "filename": query_results["metadatas"][0][i].get("filename", "N/A"),
-                    "document": query_results["documents"][0][i],
-                    # "distance": query_results["distances"][0][i] # 可以选择性显示
+                    "document": case_document_text,
+                    # "llm_analysis": llm_analysis_text # Removed from initial response
                 }
                 results.append(result_item)
         else:
@@ -157,12 +259,11 @@ def search():
     except Exception as e:
         error_message = f"搜索过程中发生错误: {str(e)}"
         print(error_message)
-        # 检查是否是集合不存在的特定错误
         if "does not exist" in str(e).lower() or "not found" in str(e).lower():
              error_message = f"错误：知识库集合 '{collection_name}' 不存在。请确保您已运行 vectorize_and_store.py 脚本为 '{case_type_folder}' 创建了知识库。"
         return jsonify({"error": error_message, "debug_collection_name": collection_name}), 500
 
-    return jsonify({"results": results, "debug_collection_name": collection_name})
+    return jsonify({"results": results, "debug_collection_name": collection_name}) # Return results without LLM analysis
 
 if __name__ == '__main__':
     print("--- Entered __main__ block ---")
