@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>法院判例智能检索</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: #0A0F18; /* Very dark blue, almost black */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: #e0e0e0; /* General text: light grey */
+        }
+
+        .header {
+            background-color: #181F2B; /* Darker than body, but distinct */
+            padding: 15px 20px;
+            border-bottom: 1px solid #242c37;
+            display: flex;
+            align-items: center;
+            justify-content: center; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            color: #ffffff; 
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.4em;
+            font-weight: 600;
+        }
+
+        .chat-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+            font-size: 0.95em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+            word-wrap: break-word; 
+        }
+
+        .user-message {
+            background-color: #006ACC; /* A brighter, distinct blue for user */
+            color: #ffffff;
+            align-self: flex-end; 
+            border-bottom-right-radius: 4px;
+        }
+
+        .system-message {
+            background-color: #2A3B4D; /* Dark grey-blue for system */
+            color: #e0e0e0;
+            align-self: flex-start; 
+            border: 1px solid #384a5c;
+            border-bottom-left-radius: 4px;
+            max-width: 50%; /* System message width is half of the screen */
+            position: relative; /* Added for positioning the copy button */
+        }
+        
+        .system-message strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1.25em;
+            color: #90caf9; /* Lighter blue for filename */
+        }
+
+        .case-section-title {
+            font-size: 1.15em;
+            color: #FFCA28;
+            font-weight: 600;
+        }
+
+        .system-message strong.case-section-title {
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        .system-message pre .case-section-title {
+            /* display: block;
+            margin-top: 0.5em;
+            margin-bottom: 0.2em; */
+        }
+
+        .system-message pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #1C2833; /* Even darker for pre background */
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #2A3B4D;
+            max-height: 350px;
+            overflow-y: auto;
+            font-size: 1.25em;
+            color: #c5c5c5; 
+        }
+        
+        .loading-message, .error-message, .info-message {
+            align-self: center; 
+            color: #c0c0c0;
+            font-style: italic;
+            background-color: #222b36; 
+            padding: 8px 15px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            border: 1px solid #2d3945;
+        }
+        .error-message {
+            color: #ffab91; /* Light orange/red for error text */
+            background-color: #4e0000; /* Very dark red for error background */
+            border-color: #6a0000;
+        }
+
+        .input-area {
+            display: flex;
+            align-items: stretch; /* Align items to stretch to fill height */
+            padding: 15px 20px;
+            background-color: #181F2B; /* Same as header */
+            border-top: 1px solid #242c37;
+            box-shadow: 0 -1px 3px rgba(0,0,0,0.3);
+        }
+        
+        /* Common styles for height and basic appearance */
+        .input-area select,
+        .input-area input[type="text"],
+        .input-area button {
+            box-sizing: border-box;
+            padding-top: 14px; 
+            padding-bottom: 14px;
+            border-radius: 22px; 
+            font-size: 1em; 
+            line-height: 1.5; 
+            outline: none;
+        }
+
+        /* Specifics for select */
+        .input-area select {
+            flex-grow: 0;
+            flex-shrink: 0;
+            flex-basis: auto; 
+            min-width: 180px; 
+            padding-left: 18px; 
+            padding-right: 18px;
+            margin-right: 10px;
+            background-color: #202836; 
+            color: #e0e0e0; 
+            border: 1px solid #384a5c;
+        }
+        .input-area select option {
+            background-color: #202836; 
+            color: #e0e0e0;
+        }
+
+        /* Specifics for input */
+        .input-area input[type="text"] {
+            flex-grow: 1; 
+            flex-shrink: 1;
+            flex-basis: 0; 
+            min-width: 200px; 
+            padding-left: 18px; 
+            padding-right: 18px;
+            margin-right: 10px;
+            background-color: #202836; 
+            color: #e0e0e0; 
+            border: 1px solid #384a5c;
+        }
+        
+        /* Specifics for button */
+        .input-area button {
+            flex-grow: 0;
+            flex-shrink: 0;
+            flex-basis: auto; 
+            padding-left: 22px; 
+            padding-right: 22px;
+            background-color: #007bff; 
+            color: white;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+            text-align: center;
+            border: 1px solid #007bff; 
+            cursor: pointer;
+        }
+
+        .input-area select:focus, 
+        .input-area input[type="text"]:focus {
+            border-color: #90caf9; 
+            box-shadow: 0 0 0 2px rgba(144, 202, 249, 0.25);
+        }
+        
+        .input-area button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3; /* Keep border consistent on hover */
+        }
+        
+        .empty-chat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            color: #6c757d; 
+        }
+        .empty-chat svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 20px;
+            fill: currentColor;
+        }
+
+        .copy-case-button {
+            position: absolute;
+            top: 10px; 
+            right: 10px; 
+            background-color: #384a5c; 
+            color: #e0e0e0;
+            border: 1px solid #4a5b6d; 
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0.7; 
+            line-height: 1; 
+            z-index: 10;
+        }
+
+        .system-message:hover .copy-case-button {
+            opacity: 1; 
+        }
+
+        .copy-case-button:hover {
+            background-color: #4a5b6d; 
+            border-color: #5a6b7d;
+        }
+
+        .copy-case-button.copied {
+            background-color: #28a745; 
+            color: white;
+            border-color: #1e7e34;
+            opacity: 1;
+        }
+
+        .copy-case-button.copied:hover {
+            background-color: #218838; 
+        }
+
+        .llm-analysis-container {
+            margin-top: 15px;
+            padding: 12px;
+            background-color: #1e2a38; /* Slightly different dark shade */
+            border: 1px dashed #384a5c;
+            border-radius: 8px;
+        }
+
+        .llm-analysis-container h4 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #FFCA28; /* Same as case-section-title for consistency */
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .llm-analysis-container pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #161F2A; /* Darker than its container */
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 1.25em; /* Match case document pre font size */
+            color: #d0d0d0;
+            max-height: 250px; /* Or as desired */
+            overflow-y: auto;
+            border: 1px solid #2A3B4D;
+        }
+
+        .llm-analyze-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+            transition: background-color 0.2s ease;
+        }
+
+        .llm-analyze-button:hover {
+            background-color: #0056b3;
+        }
+
+        .llm-analyze-button:disabled {
+            background-color: #5a6268;
+            cursor: not-allowed;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>法院判例智能检索</h1>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+         <div class="empty-chat" id="emptyChatPlaceholder">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+              <path fill-rule="evenodd" d="M3.75 4.5a.75.75 0 01.75-.75h.75c.31 0 .62.07.89.21l.06.03a11.92 11.92 0 007.1 0l.06-.03a1.515 1.515 0 01.89-.21h.75a.75.75 0 01.75.75v12.632a.75.75 0 01-.29.578l-.03.022a11.918 11.918 0 00-14.26 0l-.03-.022a.75.75 0 01-.29-.578V4.5zM9.75 12a.75.75 0 01.75-.75h3a.75.75 0 010 1.5h-3a.75.75 0 01-.75-.75zm-3 2.25a.75.75 0 01.75-.75h6.75a.75.75 0 010 1.5H7.5a.75.75 0 01-.75-.75zM9 7.5A.75.75 0 007.5 9v.043a.75.75 0 000 1.414V10.5a.75.75 0 001.5 0v-.043a.75.75 0 000-1.414V7.5zM14.25 9a.75.75 0 01.75-.75h.043a.75.75 0 011.414 0H16.5a.75.75 0 010 1.5h-.043a.75.75 0 01-1.414 0H14.25a.75.75 0 01-.75-.75z" clip-rule="evenodd" />
+            </svg>
+            <p>输入关键词开始检索相关案例。</p>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <select name="case_type_folder_select" id="case_type_folder_select">
+            {% for display_name, folder_name in case_types.items() %}
+                <option value="{{ folder_name }}">{{ display_name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" id="queryInput" placeholder="在此输入搜索关键词...">
+        <button id="sendButton">发送</button>
+    </div>
+
+    <script>
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') {
+                console.warn('escapeHtml called with non-string value:', unsafe);
+                return String(unsafe);
+            }
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function escapeRegex(string) {
+            if (typeof string !== 'string') {
+                console.warn('escapeRegex called with non-string value:', string);
+                return String(string);
+            }
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        const chatContainer = document.getElementById('chatContainer');
+        const queryInput = document.getElementById('queryInput');
+        const sendButton = document.getElementById('sendButton');
+        const caseTypeSelect = document.getElementById('case_type_folder_select');
+        const emptyChatPlaceholder = document.getElementById('emptyChatPlaceholder');
+
+        const caseTitlesToHighlight = ["关键词", "基本案情", "裁判理由", "关联索引", "裁判要旨"];
+        const llmTitlesToHighlight = ["案情摘要", "争议焦点", "裁判理由", "法律适用", "判决结果分析", "案件启示", "相关法条"]; // Titles for LLM analysis
+
+        function formatAndIndentTextContent(text, titlesArray, shouldIndent) {
+            let processedText = escapeHtml(text);
+            titlesArray.forEach(title => {
+                const regex = new RegExp(`(^|\n)([\s]*${escapeRegex(title)}[\s]*)(?=\n|$)`, 'g');
+                processedText = processedText.replace(regex, (match, p1, p2) => {
+                    return `${p1}<span class="case-section-title">${p2.trim()}</span>`;
+                });
+            });
+
+            if (shouldIndent) {
+                let lines = processedText.split('\n');
+                processedText = lines.map(line => {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.length > 0 && !trimmedLine.startsWith('<span class="case-section-title">')) {
+                        return '　　' + line;
+                    }
+                    return line;
+                }).join('\n');
+            }
+            return processedText;
+        }
+
+        // New function specifically for formatting LLM analysis content
+        function formatLlmAnalysisContent(llmText, shouldIndent) {
+            if (typeof llmText !== 'string') {
+                console.warn('formatLlmAnalysisContent called with non-string value:', llmText);
+                return String(llmText); // Or handle as an error/empty string
+            }
+            // 1. Remove all ** markdown emphasis
+            let textWithoutMarkdownBold = llmText.replace(/\*\*/g, '');
+
+            // 2. HTML Escape the text
+            let processedText = escapeHtml(textWithoutMarkdownBold);
+
+            // 3. Process lines for ### / #### titles and indentation
+            let lines = processedText.split('\n');
+            let formattedLines = lines.map(line => {
+                const trimmedLine = line.trim();
+                let titleMatch;
+
+                // Check for #### Title first, then ### Title
+                if (trimmedLine.startsWith('#### ')) {
+                    titleMatch = trimmedLine.substring(5).trim(); // Get text after '#### '
+                    return `<span class="case-section-title">${titleMatch}</span>`;
+                } else if (trimmedLine.startsWith('### ')) {
+                    titleMatch = trimmedLine.substring(4).trim(); // Get text after '### '
+                    return `<span class="case-section-title">${titleMatch}</span>`;
+                }
+
+                // If not a title, apply indentation if needed
+                if (shouldIndent && trimmedLine.length > 0) {
+                    // We are working with already HTML-escaped lines.
+                    // Indentation should be applied to the original line if it wasn't a title.
+                    return '　　' + line; // Indent the original line (which is already escaped)
+                }
+                return line; // Return original (escaped) line if no transformation applied
+            });
+
+            return formattedLines.join('\n');
+        }
+
+        function displayUserMessage(queryText) {
+            if (emptyChatPlaceholder) {
+                emptyChatPlaceholder.style.display = 'none';
+            }
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', 'user-message');
+            messageDiv.textContent = queryText;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function displaySystemMessage(message, isError = false) {
+            if (emptyChatPlaceholder && emptyChatPlaceholder.style.display !== 'none') {
+                emptyChatPlaceholder.style.display = 'none'; 
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', isError ? 'error-message' : 'system-message');
+            
+            if (typeof message === 'object' && message !== null && message.filename && message.document) {
+                let textToCopy = message.document; // Will be updated if "基本案情" is found
+
+                const strong = document.createElement('strong');
+                let displayName = message.filename;
+                if (displayName && displayName.endsWith('.txt')) {
+                    displayName = displayName.substring(0, displayName.length - 4);
+                }
+                strong.textContent = displayName;
+                messageDiv.appendChild(strong);
+
+                // Create and append Copy Button
+                const copyButton = document.createElement('button');
+                copyButton.classList.add('copy-case-button');
+                copyButton.innerHTML = '&#x1F4CB;'; // Clipboard unicode icon (📝)
+                copyButton.title = '复制案例内容';
+                messageDiv.appendChild(copyButton); // Append early, CSS handles positioning
+
+                const pre = document.createElement('pre');
+                let documentContent = message.document; // Original full content for processing
+                
+                const basicInfoMarker = "基本案情";
+                const startIndex = documentContent.indexOf(basicInfoMarker);
+
+                if (startIndex !== -1) {
+                    documentContent = documentContent.substring(startIndex); // Potentially truncated
+                }
+                // Update textToCopy with the version that might start from "基本案情"
+                textToCopy = documentContent; 
+
+                // Add event listener to the copy button
+                copyButton.addEventListener('click', (event) => {
+                    event.stopPropagation(); 
+                    navigator.clipboard.writeText(textToCopy)
+                        .then(() => {
+                            copyButton.innerHTML = '&#x2714; 已复制'; 
+                            copyButton.classList.add('copied');
+                            setTimeout(() => {
+                                copyButton.innerHTML = '&#x1F4CB;'; 
+                                copyButton.classList.remove('copied');
+                            }, 2000); 
+                        })
+                        .catch(err => {
+                            console.error('无法复制文本: ', err);
+                            copyButton.textContent = '失败'; 
+                            setTimeout(() => {
+                                copyButton.innerHTML = '&#x1F4CB;'; 
+                            }, 2000);
+                        });
+                });
+
+                // Format and display the main case document content
+                const formattedDocumentContent = formatAndIndentTextContent(documentContent, caseTitlesToHighlight, true);
+                pre.innerHTML = formattedDocumentContent;
+                messageDiv.appendChild(pre);
+
+                // Create and append "大模型分析" button
+                const analyzeButton = document.createElement('button');
+                analyzeButton.classList.add('llm-analyze-button');
+                analyzeButton.textContent = '大模型分析';
+                analyzeButton.addEventListener('click', (event) => {
+                    // Pass the original, non-truncated, non-HTML-escaped full document text for analysis
+                    handleLlmAnalysisClick(event, message.document, analyzeButton, messageDiv);
+                });
+                messageDiv.appendChild(analyzeButton);
+
+            } else {
+                messageDiv.textContent = message;
+            }
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function handleLlmAnalysisClick(event, caseDocumentText, buttonElement, messageContainerDiv) {
+            buttonElement.textContent = '分析中...';
+            buttonElement.disabled = true;
+
+            // Remove any existing LLM analysis container for this message if re-clicked
+            const existingAnalysisContainer = messageContainerDiv.querySelector('.llm-analysis-container');
+            if (existingAnalysisContainer) {
+                existingAnalysisContainer.remove();
+            }
+            // Remove any existing error message related to LLM for this message
+            const existingLlmError = messageContainerDiv.querySelector('.llm-error-message');
+            if (existingLlmError) {
+                existingLlmError.remove();
+            }
+
+            try {
+                const response = await fetch('/analyze_case_llm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 'case_document': caseDocumentText })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.analysis) {
+                    buttonElement.style.display = 'none'; // Hide the button after successful analysis
+
+                    const analysisContainer = document.createElement('div');
+                    analysisContainer.classList.add('llm-analysis-container');
+
+                    const analysisTitle = document.createElement('h4');
+                    analysisTitle.textContent = '大模型分析'; // User's preference (no colon)
+                    analysisContainer.appendChild(analysisTitle);
+
+                    const analysisPre = document.createElement('pre');
+                    // Format LLM analysis using the new dedicated function
+                    const formattedAnalysis = formatLlmAnalysisContent(data.analysis, true);
+                    analysisPre.innerHTML = formattedAnalysis;
+                    analysisContainer.appendChild(analysisPre);
+                    
+                    // Insert the analysis container after the main document's <pre> or where button was
+                    messageContainerDiv.appendChild(analysisContainer); 
+
+                } else {
+                    throw new Error(data.error || "LLM分析返回空内容或未知错误");
+                }
+            } catch (error) {
+                console.error("LLM Analysis Error:", error);
+                buttonElement.textContent = '分析失败 (重试)';
+                buttonElement.disabled = false;
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.classList.add('message', 'error-message', 'llm-error-message'); // Add specific class
+                errorDiv.style.marginTop = '10px';
+                errorDiv.style.alignSelf = 'flex-start'; // Align with system message
+                errorDiv.style.maxWidth = '100%'; // Allow it to take full width of parent
+                errorDiv.textContent = `大模型分析出错: ${error.message}`;
+                messageContainerDiv.appendChild(errorDiv);
+            }
+             chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to show new content
+        }
+
+        async function handleSearch() {
+            const query = queryInput.value.trim();
+            const caseTypeFolder = caseTypeSelect.value;
+
+            if (!query) {
+                displaySystemMessage("请输入搜索关键词。", true);
+                return;
+            }
+
+            displayUserMessage(query);
+            queryInput.value = ''; 
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'query': query,
+                        'case_type_folder': caseTypeFolder
+                    })
+                });
+                
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.error) {
+                        displaySystemMessage(`检索出错: ${data.error}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
+                    } else if (data.results && data.results.length > 0) {
+                        data.results.forEach(item => {
+                            displaySystemMessage(item, false);
+                        });
+                    } else {
+                        displaySystemMessage(`没有找到与 "${query}" 相关的结果。 ${data.debug_collection_name ? '\n(搜索的集合: ' + data.debug_collection_name + ')' : ''}`, false); 
+                    }
+                } else {
+                     displaySystemMessage(`请求错误: ${data.error || response.statusText}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
+                }
+            } catch (error) {
+                displaySystemMessage(`发生JavaScript错误: ${error.message}`, true);
+            }
+        }
+
+        sendButton.addEventListener('click', handleSearch);
+        queryInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                handleSearch();
+            }
+        });
+
+    </script>
+</body>
+</html> 

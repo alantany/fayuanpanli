@@ -1,0 +1,8 @@
+sentence-transformers
+pdfplumber
+flask
+chromadb
+tqdm
+pypinyin 
+python-dotenv
+requests 
