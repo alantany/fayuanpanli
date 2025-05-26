@@ -15,7 +15,7 @@ sudo apt update
 sudo apt upgrade -y
 
 # 安装 Python 和必要的系统包
-sudo apt install -y python3.9 python3.9-venv python3-pip git git-lfs
+sudo apt install -y python3.12 python3.12-venv python3-pip git git-lfs
 
 # 安装 Git LFS
 git lfs install
