@@ -1,0 +1,53 @@
+# 法院判例知识库 - 云端部署环境变量配置
+# 复制此文件为 .env 并填入实际的API密钥
+
+# === Embedding API 配置 ===
+# 支持的提供商: openai, azure, cohere
+EMBEDDING_API_PROVIDER=openai
+EMBEDDING_API_KEY=your_openai_api_key_here
+EMBEDDING_MODEL_NAME=text-embedding-3-small
+EMBEDDING_API_URL=https://api.openai.com/v1/embeddings
+
+# === 资源限制配置 (1C2G优化) ===
+BATCH_SIZE=10
+MAX_WORKERS=1
+MEMORY_LIMIT=1500
+
+# === ChromaDB 配置 ===
+CHROMA_DATA_PATH=db/
+
+# === Flask 配置 ===
+FLASK_HOST=127.0.0.1
+FLASK_PORT=5001
+FLASK_DEBUG=False
+
+# === LLM 配置 (保持原有) ===
+LLM_API_URL=https://openrouter.ai/api/v1/chat/completions
+LLM_API_KEY=your_llm_api_key_here
+LLM_MODEL_NAME=deepseek/deepseek-r1:free
+
+# === 缓存配置 ===
+ENABLE_EMBEDDING_CACHE=True
+CACHE_DIR=cache/
+CACHE_MAX_SIZE_MB=100
+
+# === API 限制配置 ===
+API_RATE_LIMIT=60
+API_TIMEOUT=30
+API_RETRY_TIMES=3
+
+# === 监控配置 ===
+ENABLE_MONITORING=True
+LOG_LEVEL=INFO
+
+# === 可选: 其他Embedding服务配置 ===
+# Azure OpenAI 配置
+# EMBEDDING_API_PROVIDER=azure
+# EMBEDDING_API_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment/embeddings?api-version=2023-05-15
+# EMBEDDING_API_KEY=your_azure_api_key
+
+# Cohere 配置
+# EMBEDDING_API_PROVIDER=cohere
+# EMBEDDING_API_URL=https://api.cohere.ai/v1/embed
+# EMBEDDING_API_KEY=your_cohere_api_key
+# EMBEDDING_MODEL_NAME=embed-multilingual-v3.0 

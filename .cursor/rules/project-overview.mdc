@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 法院判例知识库项目概览
+
+## 项目目标
+这是一个智能的法院判例知识库系统，用于处理五种类型的法律案例（民事、刑事、行政、执行、国家赔偿），支持自然语言搜索和大模型分析。
+
+## 核心架构
+- **后端**: Flask Web应用 ([app.py](mdc:app.py))
+- **前端**: HTML/CSS/JavaScript界面 ([templates/index.html](mdc:templates/index.html))
+- **向量数据库**: ChromaDB存储案例向量
+- **LLM集成**: 通过OpenRouter API调用DeepSeek模型进行案例分析
+- **数据处理**: 多个Python脚本处理PDF到文本的转换和清理
+
+## 主要功能
+1. **案例检索**: 基于语义相似度的向量搜索
+2. **按需LLM分析**: 用户点击按钮触发大模型对案例的智能分析
+3. **格式化显示**: 高亮显示案例和分析中的关键标题
+4. **复制功能**: 便于用户复制案例内容
+
+## 技术栈
+- Python, Flask
+- ChromaDB (向量数据库)
+- sentence-transformers (文本向量化)
+- OpenRouter API (LLM接口)
+- HTML/CSS/JavaScript (前端)
+
+## 数据流
+1. PDF案例 → 文本清理 → 分割为独立文件 → 向量化 → ChromaDB存储
+2. 用户查询 → 向量搜索 → 返回相关案例 → 可选LLM分析

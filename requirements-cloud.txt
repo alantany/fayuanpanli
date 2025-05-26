@@ -1,0 +1,34 @@
+# 法院判例知识库 - 云端轻量级部署依赖
+
+# 核心Web框架
+flask==2.3.3
+
+# 向量数据库 (保持)
+chromadb==0.4.15
+
+# 文本处理
+pypinyin==0.49.0
+tqdm==4.66.1
+
+# 环境配置
+python-dotenv==1.0.0
+
+# HTTP请求
+requests==2.31.0
+
+# 远程Embedding API
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# 数据处理 (轻量级)
+numpy>=1.21.0
+
+# 可选：其他embedding服务
+# cohere>=4.0.0
+# anthropic>=0.3.0
+
+# 生产环境
+gunicorn==21.2.0
+
+# 系统监控 (可选)
+psutil>=5.9.0 
