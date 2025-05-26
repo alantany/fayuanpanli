@@ -3,3 +3,25 @@ venv/
 
 # Environment variables file
 .env
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+nohup.out
+
+# Cloud deployment branch: Keep database files for easy deployment
+# Note: Database files are tracked in this branch for cloud deployment convenience
