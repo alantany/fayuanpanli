@@ -261,13 +261,14 @@
             background-color: #1e2a38; /* Slightly different dark shade */
             border: 1px dashed #384a5c;
             border-radius: 8px;
+            position: relative; /* Added for positioning the copy button */
         }
 
         .llm-analysis-container h4 {
             margin-top: 0;
             margin-bottom: 8px;
-            color: #FFCA28; /* Same as case-section-title for consistency */
-            font-size: 1.1em;
+            color: #90caf9; /* Changed to match case name color */
+            font-size: 1.25em; /* Changed to match case name font size */
             font-weight: 600;
         }
 
@@ -282,6 +283,43 @@
             max-height: 250px; /* Or as desired */
             overflow-y: auto;
             border: 1px solid #2A3B4D;
+        }
+
+        .copy-llm-button {
+            position: absolute;
+            top: 10px; 
+            right: 10px; 
+            background-color: #384a5c; 
+            color: #e0e0e0;
+            border: 1px solid #4a5b6d; 
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0.7; 
+            line-height: 1; 
+            z-index: 10;
+        }
+
+        .llm-analysis-container:hover .copy-llm-button {
+            opacity: 1; 
+        }
+
+        .copy-llm-button:hover {
+            background-color: #4a5b6d; 
+            border-color: #5a6b7d;
+        }
+
+        .copy-llm-button.copied {
+            background-color: #28a745; 
+            color: white;
+            border-color: #1e7e34;
+            opacity: 1;
+        }
+
+        .copy-llm-button.copied:hover {
+            background-color: #218838; 
         }
 
         .llm-analyze-button {
@@ -550,6 +588,34 @@
                     const analysisTitle = document.createElement('h4');
                     analysisTitle.textContent = '大模型分析'; // User's preference (no colon)
                     analysisContainer.appendChild(analysisTitle);
+
+                    // Create and append Copy Button for LLM analysis
+                    const copyLlmButton = document.createElement('button');
+                    copyLlmButton.classList.add('copy-llm-button');
+                    copyLlmButton.innerHTML = '&#x1F4CB;'; // Clipboard unicode icon (📝)
+                    copyLlmButton.title = '复制大模型分析内容';
+                    analysisContainer.appendChild(copyLlmButton); // Append early, CSS handles positioning
+
+                    // Add event listener to the copy button
+                    copyLlmButton.addEventListener('click', (event) => {
+                        event.stopPropagation(); 
+                        navigator.clipboard.writeText(data.analysis)
+                            .then(() => {
+                                copyLlmButton.innerHTML = '&#x2714; 已复制'; 
+                                copyLlmButton.classList.add('copied');
+                                setTimeout(() => {
+                                    copyLlmButton.innerHTML = '&#x1F4CB;'; 
+                                    copyLlmButton.classList.remove('copied');
+                                }, 2000); 
+                            })
+                            .catch(err => {
+                                console.error('无法复制文本: ', err);
+                                copyLlmButton.textContent = '失败'; 
+                                setTimeout(() => {
+                                    copyLlmButton.innerHTML = '&#x1F4CB;'; 
+                                }, 2000);
+                            });
+                    });
 
                     const analysisPre = document.createElement('pre');
                     // Format LLM analysis using the new dedicated function
