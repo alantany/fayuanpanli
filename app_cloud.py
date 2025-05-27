@@ -84,7 +84,7 @@ def init_chromadb():
     
     try:
         # 初始化ChromaDB客户端
-        client = chromadb.PersistentClient(path="./chroma_db")
+        client = chromadb.PersistentClient(path="./db")
         logger.info("ChromaDB client initialized successfully")
         
         # 初始化embedding模型（如果可用）
