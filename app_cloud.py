@@ -65,12 +65,18 @@ CASE_TYPES = {
 }
 
 # 添加embedding支持
-try:
-    from sentence_transformers import SentenceTransformer
-    EMBEDDING_AVAILABLE = True
-except ImportError:
+FORCE_DISABLE_EMBEDDING = os.getenv("FORCE_DISABLE_EMBEDDING", "False").lower() == "true"
+
+if FORCE_DISABLE_EMBEDDING:
     EMBEDDING_AVAILABLE = False
-    print("Warning: sentence-transformers not available, using ChromaDB default embedding")
+    print("Embedding disabled by environment variable")
+else:
+    try:
+        from sentence_transformers import SentenceTransformer
+        EMBEDDING_AVAILABLE = True
+    except ImportError:
+        EMBEDDING_AVAILABLE = False
+        print("Warning: sentence-transformers not available, using ChromaDB default embedding")
 
 def init_chromadb():
     """初始化ChromaDB客户端"""
