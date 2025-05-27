@@ -267,8 +267,8 @@
         .llm-analysis-container h4 {
             margin-top: 0;
             margin-bottom: 8px;
-            color: #90caf9; /* Changed to match case name color */
-            font-size: 1.25em; /* Changed to match case name font size */
+            color: #90caf9; /* Match system-message strong color - Lighter blue for filename */
+            font-size: 1.25em; /* Match system-message strong font size */
             font-weight: 600;
         }
 
@@ -594,12 +594,18 @@
                     copyLlmButton.classList.add('copy-llm-button');
                     copyLlmButton.innerHTML = '&#x1F4CB;'; // Clipboard unicode icon (📝)
                     copyLlmButton.title = '复制大模型分析内容';
-                    analysisContainer.appendChild(copyLlmButton); // Append early, CSS handles positioning
+                    analysisContainer.appendChild(copyLlmButton);
 
-                    // Add event listener to the copy button
+                    const analysisPre = document.createElement('pre');
+                    // Format LLM analysis using the new dedicated function
+                    const formattedAnalysis = formatLlmAnalysisContent(data.analysis, true);
+                    analysisPre.innerHTML = formattedAnalysis;
+                    analysisContainer.appendChild(analysisPre);
+
+                    // Add event listener to the copy button for LLM analysis
                     copyLlmButton.addEventListener('click', (event) => {
                         event.stopPropagation(); 
-                        navigator.clipboard.writeText(data.analysis)
+                        navigator.clipboard.writeText(data.analysis) // Copy original analysis text without formatting
                             .then(() => {
                                 copyLlmButton.innerHTML = '&#x2714; 已复制'; 
                                 copyLlmButton.classList.add('copied');
@@ -616,15 +622,9 @@
                                 }, 2000);
                             });
                     });
-
-                    const analysisPre = document.createElement('pre');
-                    // Format LLM analysis using the new dedicated function
-                    const formattedAnalysis = formatLlmAnalysisContent(data.analysis, true);
-                    analysisPre.innerHTML = formattedAnalysis;
-                    analysisContainer.appendChild(analysisPre);
                     
                     // Insert the analysis container after the main document's <pre> or where button was
-                    messageContainerDiv.appendChild(analysisContainer); 
+                    messageContainerDiv.appendChild(analysisContainer);
 
                 } else {
                     throw new Error(data.error || "LLM分析返回空内容或未知错误");
