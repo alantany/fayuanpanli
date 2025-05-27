@@ -282,95 +282,258 @@ def analyze_case_llm_route():
 
 @app.route('/search', methods=['POST'])
 def search():
-    """搜索API端点 - 使用预存储的向量进行查询"""
-    query = request.form.get('query', '').strip()
-    case_type_folder = request.form.get('case_type_folder', '民事案例')
-    
-    logger.info(f"Search request: query='{query}', case_type='{case_type_folder}'")
-    
-    if not query:
-        return jsonify({"error": "查询内容不能为空"}), 400
-    
-    # 初始化ChromaDB（如果尚未初始化）
-    if client is None:
-        try:
-            init_chromadb()
-        except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
-            return jsonify({"error": f"数据库初始化失败: {str(e)}"}), 500
-    
+    """搜索API端点 - 支持向量搜索和关键词搜索"""
     try:
-        # 获取集合名称
-        collection_name = get_clean_collection_name(case_type_folder)
-        logger.info(f"Attempting to access collection: {collection_name}")
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({'error': '请提供搜索查询'}), 400
         
-        # 获取集合
+        query = data['query']
+        case_type = data.get('case_type', '')
+        
+        logger.info(f"搜索请求: query='{query}', case_type='{case_type}'")
+        
+        # 获取对应的集合
+        collection_name = get_clean_collection_name(case_type) if case_type else None
+        
+        # 尝试连接数据库
         try:
-            collection = client.get_collection(name=collection_name)
+            client = chromadb.PersistentClient(path="./db")
+            
+            if collection_name:
+                try:
+                    collection = client.get_collection(name=collection_name)
+                    logger.info(f"Found specific collection: {collection_name}")
+                except:
+                    logger.warning(f"Collection {collection_name} not found, searching all collections")
+                    collection = None
+            else:
+                collection = None
+                
         except Exception as e:
-            logger.error(f"Collection not found: {collection_name}")
-            return jsonify({
-                "error": f"未找到 '{case_type_folder}' 类型的案例数据",
-                "debug_collection_name": collection_name,
-                "results": []
-            }), 404
+            logger.error(f"Database connection failed: {e}")
+            return jsonify({'error': '数据库连接失败'}), 500
         
         # 执行搜索
-        if EMBEDDING_API_ENABLED:
-            # 使用云端embedding API进行向量搜索
-            logger.info("Using cloud embedding API for vector search")
-            query_embedding = get_embedding_from_api(query)
-            if query_embedding is not None:
-                results = collection.query(
-                    query_embeddings=[query_embedding],  # 注意这里需要是列表
-                    n_results=1,
-                    include=["documents", "metadatas", "distances"]
-                )
-            else:
-                # 如果API调用失败，降级到文本搜索
-                logger.warning("Embedding API failed, falling back to text search")
-                results = collection.query(
-                    query_texts=[query],
-                    n_results=1,
-                    include=["documents", "metadatas", "distances"]
-                )
-        else:
-            # 使用ChromaDB默认的文本搜索
-            logger.info("Using ChromaDB default text search")
-            results = collection.query(
-                query_texts=[query],
-                n_results=1,
-                include=["documents", "metadatas", "distances"]
-            )
+        all_results = []
         
-        # 处理搜索结果
-        formatted_results = []
-        if results['documents'] and results['documents'][0]:
-            for i, doc in enumerate(results['documents'][0]):
-                metadata = results['metadatas'][0][i] if results['metadatas'][0] else {}
-                distance = results['distances'][0][i] if results['distances'][0] else 0
+        if collection:
+            # 搜索特定集合
+            results = search_in_collection(collection, query)
+            all_results.extend(results)
+        else:
+            # 搜索所有集合
+            try:
+                collections = client.list_collections()
+                logger.info(f"Searching across {len(collections)} collections")
                 
-                filename = metadata.get('filename', f'案例_{i+1}.txt')
-                
-                formatted_results.append({
-                    'filename': filename,
-                    'document': doc,
-                    'distance': distance
-                })
+                for collection_info in collections:
+                    try:
+                        coll = client.get_collection(name=collection_info.name)
+                        results = search_in_collection(coll, query)
+                        all_results.extend(results)
+                    except Exception as e:
+                        logger.warning(f"Error searching collection {collection_info.name}: {e}")
+                        continue
+            except Exception as e:
+                logger.error(f"Error listing collections: {e}")
+                return jsonify({'error': '搜索失败'}), 500
+        
+        # 按相关性排序（距离越小越相关）
+        all_results.sort(key=lambda x: x.get('distance', float('inf')))
+        
+        # 取最相关的结果
+        formatted_results = all_results[:1] if all_results else []
         
         logger.info(f"Found {len(formatted_results)} results")
-        
-        return jsonify({
-            "results": formatted_results,
-            "debug_collection_name": collection_name
-        })
+        return jsonify({'results': formatted_results})
         
     except Exception as e:
-        logger.error(f"Error during search: {str(e)}")
-        return jsonify({
-            "error": f"搜索过程中发生错误: {str(e)}",
-            "debug_collection_name": collection_name if 'collection_name' in locals() else "unknown"
-        }), 500
+        logger.error(f"Search error: {e}")
+        return jsonify({'error': '搜索过程中发生错误'}), 500
+
+def search_in_collection(collection, query):
+    """在指定集合中搜索"""
+    results = []
+    
+    try:
+        # 方法1: 尝试向量搜索（如果embedding API可用）
+        if EMBEDDING_API_ENABLED:
+            try:
+                logger.info("Attempting vector search with cloud embedding API")
+                query_embedding = get_embedding_from_api(query)
+                if query_embedding is not None:
+                    search_results = collection.query(
+                        query_embeddings=[query_embedding],
+                        n_results=5,
+                        include=["documents", "metadatas", "distances"]
+                    )
+                    
+                    if search_results['documents'] and search_results['documents'][0]:
+                        for i, doc in enumerate(search_results['documents'][0]):
+                            metadata = search_results['metadatas'][0][i] if search_results['metadatas'][0] else {}
+                            distance = search_results['distances'][0][i] if search_results['distances'][0] else 0
+                            
+                            results.append({
+                                'filename': metadata.get('filename', f'案例_{i+1}.txt'),
+                                'document': doc,
+                                'distance': distance,
+                                'case_type': metadata.get('case_type', '未知类型'),
+                                'search_method': 'vector_api'
+                            })
+                        return results
+            except Exception as e:
+                logger.warning(f"Vector search failed: {e}")
+        
+        # 方法2: 尝试ChromaDB默认向量搜索
+        try:
+            logger.info("Attempting ChromaDB default vector search")
+            search_results = collection.query(
+                query_texts=[query],
+                n_results=5,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            if search_results['documents'] and search_results['documents'][0]:
+                for i, doc in enumerate(search_results['documents'][0]):
+                    metadata = search_results['metadatas'][0][i] if search_results['metadatas'][0] else {}
+                    distance = search_results['distances'][0][i] if search_results['distances'][0] else 0
+                    
+                    results.append({
+                        'filename': metadata.get('filename', f'案例_{i+1}.txt'),
+                        'document': doc,
+                        'distance': distance,
+                        'case_type': metadata.get('case_type', '未知类型'),
+                        'search_method': 'vector_default'
+                    })
+                return results
+        except Exception as e:
+            logger.warning(f"Default vector search failed: {e}")
+        
+        # 方法3: 关键词搜索（最可靠的备选方案）
+        logger.info("Falling back to keyword search")
+        return keyword_search_in_collection(collection, query)
+        
+    except Exception as e:
+        logger.error(f"All search methods failed in collection: {e}")
+        return []
+
+def keyword_search_in_collection(collection, query):
+    """在集合中进行关键词搜索"""
+    results = []
+    
+    try:
+        # 获取所有文档和元数据
+        all_data = collection.get(include=["documents", "metadatas"])
+        
+        if not all_data['documents']:
+            return results
+        
+        # 提取搜索关键词
+        keywords = extract_keywords(query)
+        logger.info(f"Extracted keywords: {keywords}")
+        
+        # 对每个文档计算相关性分数
+        scored_docs = []
+        for i, doc in enumerate(all_data['documents']):
+            metadata = all_data['metadatas'][i] if i < len(all_data['metadatas']) else {}
+            
+            # 计算关键词匹配分数
+            score = calculate_keyword_score(doc, metadata, keywords, query)
+            
+            if score > 0:  # 只保留有匹配的文档
+                scored_docs.append({
+                    'document': doc,
+                    'metadata': metadata,
+                    'score': score,
+                    'distance': 1.0 - score  # 转换为距离（越小越相关）
+                })
+        
+        # 按分数排序
+        scored_docs.sort(key=lambda x: x['score'], reverse=True)
+        
+        # 返回最相关的结果
+        for doc_info in scored_docs[:5]:
+            results.append({
+                'filename': doc_info['metadata'].get('filename', '未知文件.txt'),
+                'document': doc_info['document'],
+                'distance': doc_info['distance'],
+                'case_type': doc_info['metadata'].get('case_type', '未知类型'),
+                'search_method': 'keyword',
+                'keyword_score': doc_info['score']
+            })
+        
+        logger.info(f"Keyword search found {len(results)} relevant documents")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Keyword search failed: {e}")
+        return []
+
+def extract_keywords(query):
+    """从查询中提取关键词"""
+    import re
+    
+    # 移除标点符号，分割成词
+    clean_query = re.sub(r'[^\w\s]', ' ', query)
+    words = clean_query.split()
+    
+    # 定义常见的法律关键词
+    legal_keywords = {
+        '婚姻': ['婚姻', '离婚', '夫妻', '配偶', '结婚'],
+        '合同': ['合同', '协议', '约定', '违约'],
+        '交通': ['交通', '车祸', '事故', '撞车', '肇事'],
+        '劳动': ['劳动', '工作', '雇佣', '员工', '工资'],
+        '房产': ['房产', '房屋', '买卖', '租赁', '物业'],
+        '刑事': ['刑事', '犯罪', '盗窃', '诈骗', '故意'],
+        '民事': ['民事', '纠纷', '争议', '赔偿'],
+        '行政': ['行政', '政府', '行政机关', '执法'],
+        '执行': ['执行', '强制执行', '申请执行'],
+        '国家赔偿': ['国家赔偿', '赔偿', '国家机关']
+    }
+    
+    # 扩展关键词
+    expanded_keywords = set(words)
+    for word in words:
+        for category, synonyms in legal_keywords.items():
+            if word in synonyms:
+                expanded_keywords.update(synonyms)
+    
+    return list(expanded_keywords)
+
+def calculate_keyword_score(document, metadata, keywords, original_query):
+    """计算文档的关键词匹配分数"""
+    score = 0.0
+    
+    # 将文档和元数据转换为小写用于匹配
+    doc_lower = document.lower()
+    filename_lower = metadata.get('filename', '').lower()
+    case_type_lower = metadata.get('case_type', '').lower()
+    
+    # 原始查询的完整匹配（最高权重）
+    if original_query.lower() in doc_lower:
+        score += 10.0
+    
+    # 文件名匹配（高权重）
+    for keyword in keywords:
+        if keyword.lower() in filename_lower:
+            score += 5.0
+    
+    # 案例类型匹配（中等权重）
+    for keyword in keywords:
+        if keyword.lower() in case_type_lower:
+            score += 3.0
+    
+    # 文档内容匹配（基础权重）
+    for keyword in keywords:
+        count = doc_lower.count(keyword.lower())
+        score += count * 1.0
+    
+    # 标准化分数（0-1之间）
+    max_possible_score = 10.0 + len(keywords) * 6.0  # 估算最大可能分数
+    normalized_score = min(score / max_possible_score, 1.0) if max_possible_score > 0 else 0.0
+    
+    return normalized_score
 
 @app.route('/health')
 def health_check():

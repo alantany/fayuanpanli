@@ -633,11 +633,11 @@
                 const response = await fetch('/search', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Content-Type': 'application/json',
                     },
-                    body: new URLSearchParams({
+                    body: JSON.stringify({
                         'query': query,
-                        'case_type_folder': caseTypeFolder
+                        'case_type': caseTypeFolder
                     })
                 });
                 
@@ -645,16 +645,16 @@
 
                 if (response.ok) {
                     if (data.error) {
-                        displaySystemMessage(`检索出错: ${data.error}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
+                        displaySystemMessage(`检索出错: ${data.error}`, true);
                     } else if (data.results && data.results.length > 0) {
                         data.results.forEach(item => {
                             displaySystemMessage(item, false);
                         });
                     } else {
-                        displaySystemMessage(`没有找到与 "${query}" 相关的结果。 ${data.debug_collection_name ? '\n(搜索的集合: ' + data.debug_collection_name + ')' : ''}`, false); 
+                        displaySystemMessage(`没有找到与 "${query}" 相关的结果。`, false); 
                     }
                 } else {
-                     displaySystemMessage(`请求错误: ${data.error || response.statusText}${data.debug_collection_name ? '\n尝试的集合: ' + data.debug_collection_name : ''}`, true);
+                     displaySystemMessage(`请求错误: ${data.error || response.statusText}`, true);
                 }
             } catch (error) {
                 displaySystemMessage(`发生JavaScript错误: ${error.message}`, true);
