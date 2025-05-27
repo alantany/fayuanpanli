@@ -37,26 +37,51 @@ def clean_and_recreate_db():
 
 def import_data_with_vectors():
     """从JSON格式导入数据，包含预计算的向量"""
-    json_file = "db_export.json"
+    # 优先使用包含向量的JSON文件
+    json_files = ["db_export_with_vectors.json", "db_export.json"]
+    json_file = None
     
-    if not os.path.exists(json_file):
-        logger.error(f"❌ JSON导出文件不存在: {json_file}")
+    logger.info("🔍 检查可用的JSON文件...")
+    for file in json_files:
+        if os.path.exists(file):
+            file_size = os.path.getsize(file) / 1024 / 1024
+            logger.info(f"   📁 找到文件: {file} ({file_size:.1f} MB)")
+            if json_file is None:  # 使用第一个找到的文件（优先级顺序）
+                json_file = file
+                logger.info(f"   ✅ 选择使用: {file}")
+    
+    if not json_file:
+        logger.error(f"❌ 未找到JSON导出文件")
+        logger.info("请确保以下文件之一存在:")
+        for file in json_files:
+            logger.info(f"   - {file}")
         return False
     
-    logger.info("📥 从JSON导入数据（包含向量）...")
+    logger.info(f"📥 从JSON导入数据: {json_file}")
     
     try:
+        logger.info("📖 读取JSON文件...")
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         # 显示导入信息
         metadata = data.get("_metadata", {})
+        includes_vectors = metadata.get("includes_vectors", False)
+        
         logger.info(f"📊 导入信息:")
+        logger.info(f"   - 文件名: {json_file}")
         logger.info(f"   - 源平台: {metadata.get('source_platform', 'unknown')}")
         logger.info(f"   - 导出时间: {metadata.get('export_time', 'unknown')}")
         logger.info(f"   - 总文档数: {metadata.get('total_documents', 'unknown')}")
+        logger.info(f"   - 包含向量: {'✅' if includes_vectors else '❌'}")
         
-        # 初始化ChromaDB客户端（使用默认embedding函数，但不会触发下载）
+        if includes_vectors:
+            logger.info("🎯 检测到预计算向量，将避免模型下载")
+        else:
+            logger.warning("⚠️  未检测到向量数据，可能会触发模型下载")
+        
+        # 初始化ChromaDB客户端
+        logger.info("🔗 初始化ChromaDB客户端...")
         client = chromadb.PersistentClient(path="db/")
         total_imported = 0
         
@@ -68,7 +93,7 @@ def import_data_with_vectors():
             logger.info(f"📥 导入集合: {collection_name}")
             
             try:
-                # 创建集合（使用默认embedding函数）
+                # 创建集合
                 collection = client.get_or_create_collection(name=collection_name)
                 
                 # 检查集合数据结构
@@ -81,6 +106,12 @@ def import_data_with_vectors():
                 ids = collection_data.get('ids', [])
                 embeddings = collection_data.get('embeddings', [])
                 
+                logger.info(f"   📊 集合数据统计:")
+                logger.info(f"      - 文档数: {len(documents)}")
+                logger.info(f"      - 元数据数: {len(metadatas)}")
+                logger.info(f"      - ID数: {len(ids)}")
+                logger.info(f"      - 向量数: {len(embeddings)}")
+                
                 if documents and len(documents) > 0:
                     # 确保所有数据数量匹配
                     if not metadatas:
@@ -92,7 +123,7 @@ def import_data_with_vectors():
                     if embeddings and len(embeddings) == len(documents):
                         logger.info(f"   🎯 使用预计算向量，避免模型下载")
                         # 批量导入数据（包含向量）
-                        batch_size = 50
+                        batch_size = 100  # 增加批次大小，因为不需要计算向量
                         for i in range(0, len(documents), batch_size):
                             batch_docs = documents[i:i+batch_size]
                             batch_metas = metadatas[i:i+batch_size]
@@ -117,7 +148,7 @@ def import_data_with_vectors():
                     else:
                         logger.warning(f"   ⚠️  没有预计算向量，将触发模型下载")
                         # 批量导入数据（不含向量，会触发embedding计算）
-                        batch_size = 50
+                        batch_size = 20  # 减小批次大小，避免内存问题
                         for i in range(0, len(documents), batch_size):
                             batch_docs = documents[i:i+batch_size]
                             batch_metas = metadatas[i:i+batch_size]
