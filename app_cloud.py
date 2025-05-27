@@ -12,6 +12,16 @@ import chromadb
 import requests
 from pypinyin import pinyin, Style
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("--- .env file loaded successfully ---")
+except ImportError:
+    print("--- python-dotenv not installed, using system environment variables ---")
+except Exception as e:
+    print(f"--- Error loading .env file: {e} ---")
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
