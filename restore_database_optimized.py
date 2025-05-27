@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-法院判例知识库 - 数据库恢复脚本
-完全重新创建数据库并导入JSON数据
+法院判例知识库 - 优化的数据库恢复脚本
+避免在云端下载embedding模型，使用预计算的向量
 """
 
 import os
@@ -35,15 +35,15 @@ def clean_and_recreate_db():
     os.chmod(db_path, 0o755)
     logger.info("✅ 已设置目录权限")
 
-def import_data_from_json():
-    """从JSON格式导入数据"""
+def import_data_with_vectors():
+    """从JSON格式导入数据，包含预计算的向量"""
     json_file = "db_export.json"
     
     if not os.path.exists(json_file):
         logger.error(f"❌ JSON导出文件不存在: {json_file}")
         return False
     
-    logger.info("📥 从JSON导入数据...")
+    logger.info("📥 从JSON导入数据（包含向量）...")
     
     try:
         with open(json_file, 'r', encoding='utf-8') as f:
@@ -56,7 +56,7 @@ def import_data_from_json():
         logger.info(f"   - 导出时间: {metadata.get('export_time', 'unknown')}")
         logger.info(f"   - 总文档数: {metadata.get('total_documents', 'unknown')}")
         
-        # 初始化ChromaDB客户端
+        # 初始化ChromaDB客户端（使用默认embedding函数，但不会触发下载）
         client = chromadb.PersistentClient(path="db/")
         total_imported = 0
         
@@ -68,7 +68,7 @@ def import_data_from_json():
             logger.info(f"📥 导入集合: {collection_name}")
             
             try:
-                # 创建集合
+                # 创建集合（使用默认embedding函数）
                 collection = client.get_or_create_collection(name=collection_name)
                 
                 # 检查集合数据结构
@@ -79,34 +79,63 @@ def import_data_from_json():
                 documents = collection_data.get('documents', [])
                 metadatas = collection_data.get('metadatas', [])
                 ids = collection_data.get('ids', [])
+                embeddings = collection_data.get('embeddings', [])
                 
                 if documents and len(documents) > 0:
-                    # 确保元数据和ID数量匹配
+                    # 确保所有数据数量匹配
                     if not metadatas:
                         metadatas = [{}] * len(documents)
                     if not ids:
                         ids = [f"doc_{i}" for i in range(len(documents))]
                     
-                    # 批量导入数据
-                    batch_size = 50  # 减小批次大小
-                    for i in range(0, len(documents), batch_size):
-                        batch_docs = documents[i:i+batch_size]
-                        batch_metas = metadatas[i:i+batch_size]
-                        batch_ids = ids[i:i+batch_size]
-                        
-                        # 确保批次数据长度一致
-                        min_len = min(len(batch_docs), len(batch_metas), len(batch_ids))
-                        batch_docs = batch_docs[:min_len]
-                        batch_metas = batch_metas[:min_len]
-                        batch_ids = batch_ids[:min_len]
-                        
-                        collection.add(
-                            documents=batch_docs,
-                            metadatas=batch_metas,
-                            ids=batch_ids
-                        )
-                        
-                        logger.info(f"   ✅ 导入批次 {i//batch_size + 1}: {len(batch_docs)} 个文档")
+                    # 如果有预计算的向量，使用它们；否则让ChromaDB计算
+                    if embeddings and len(embeddings) == len(documents):
+                        logger.info(f"   🎯 使用预计算向量，避免模型下载")
+                        # 批量导入数据（包含向量）
+                        batch_size = 50
+                        for i in range(0, len(documents), batch_size):
+                            batch_docs = documents[i:i+batch_size]
+                            batch_metas = metadatas[i:i+batch_size]
+                            batch_ids = ids[i:i+batch_size]
+                            batch_embeddings = embeddings[i:i+batch_size]
+                            
+                            # 确保批次数据长度一致
+                            min_len = min(len(batch_docs), len(batch_metas), len(batch_ids), len(batch_embeddings))
+                            batch_docs = batch_docs[:min_len]
+                            batch_metas = batch_metas[:min_len]
+                            batch_ids = batch_ids[:min_len]
+                            batch_embeddings = batch_embeddings[:min_len]
+                            
+                            collection.add(
+                                documents=batch_docs,
+                                metadatas=batch_metas,
+                                ids=batch_ids,
+                                embeddings=batch_embeddings
+                            )
+                            
+                            logger.info(f"   ✅ 导入批次 {i//batch_size + 1}: {len(batch_docs)} 个文档（含向量）")
+                    else:
+                        logger.warning(f"   ⚠️  没有预计算向量，将触发模型下载")
+                        # 批量导入数据（不含向量，会触发embedding计算）
+                        batch_size = 50
+                        for i in range(0, len(documents), batch_size):
+                            batch_docs = documents[i:i+batch_size]
+                            batch_metas = metadatas[i:i+batch_size]
+                            batch_ids = ids[i:i+batch_size]
+                            
+                            # 确保批次数据长度一致
+                            min_len = min(len(batch_docs), len(batch_metas), len(batch_ids))
+                            batch_docs = batch_docs[:min_len]
+                            batch_metas = batch_metas[:min_len]
+                            batch_ids = batch_ids[:min_len]
+                            
+                            collection.add(
+                                documents=batch_docs,
+                                metadatas=batch_metas,
+                                ids=batch_ids
+                            )
+                            
+                            logger.info(f"   ✅ 导入批次 {i//batch_size + 1}: {len(batch_docs)} 个文档")
                     
                     total_imported += len(documents)
                     logger.info(f"✅ 完成导入 {len(documents)} 个文档到 {collection_name}")
@@ -152,7 +181,7 @@ def verify_database():
 
 def main():
     """主函数"""
-    logger.info("🚀 开始数据库恢复...")
+    logger.info("🚀 开始优化数据库恢复...")
     
     # 检查JSON文件
     if not os.path.exists("db_export.json"):
@@ -164,10 +193,11 @@ def main():
     clean_and_recreate_db()
     
     # 导入JSON数据
-    if import_data_from_json():
+    if import_data_with_vectors():
         # 验证结果
         if verify_database():
-            logger.info("🎉 数据库恢复完成！")
+            logger.info("🎉 优化数据库恢复完成！")
+            logger.info("💡 提示：如果使用了预计算向量，已避免模型下载")
         else:
             logger.error("❌ 数据库验证失败")
     else:
