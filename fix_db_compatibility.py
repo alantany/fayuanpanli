@@ -37,8 +37,29 @@ def check_database_compatibility():
     try:
         client = chromadb.PersistentClient(path=db_path)
         collections = client.list_collections()
-        logger.info(f"✅ 数据库连接成功，找到 {len(collections)} 个集合")
+        
+        # 检查集合数量
+        if len(collections) == 0:
+            logger.warning("⚠️  数据库为空，没有任何集合")
+            return False
+        
+        # 检查文档数量
+        total_docs = 0
+        for collection_info in collections:
+            try:
+                collection = client.get_collection(collection_info.name)
+                count = collection.count()
+                total_docs += count
+            except Exception as e:
+                logger.warning(f"⚠️  集合 {collection_info.name} 访问异常: {e}")
+        
+        if total_docs == 0:
+            logger.warning("⚠️  数据库中没有任何文档")
+            return False
+        
+        logger.info(f"✅ 数据库连接成功，找到 {len(collections)} 个集合，{total_docs} 个文档")
         return True
+        
     except Exception as e:
         logger.error(f"❌ 数据库连接失败: {str(e)}")
         if "no such column: collections.topic" in str(e):
