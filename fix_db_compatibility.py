@@ -122,26 +122,59 @@ def import_data_from_json():
         with open(json_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
+        # 显示导入信息
+        metadata = data.get("_metadata", {})
+        logger.info(f"📊 导入信息:")
+        logger.info(f"   - 源平台: {metadata.get('source_platform', 'unknown')}")
+        logger.info(f"   - 导出时间: {metadata.get('export_time', 'unknown')}")
+        logger.info(f"   - 总文档数: {metadata.get('total_documents', 'unknown')}")
+        
         client = chromadb.PersistentClient(path="db/")
+        total_imported = 0
         
         for collection_name, collection_data in data.items():
+            # 跳过元数据
+            if collection_name == "_metadata":
+                continue
+                
             logger.info(f"📥 导入集合: {collection_name}")
             
             try:
                 collection = client.get_or_create_collection(name=collection_name)
                 
-                if collection_data['documents']:
-                    collection.add(
-                        documents=collection_data['documents'],
-                        metadatas=collection_data['metadatas'],
-                        ids=collection_data['ids']
-                    )
-                    logger.info(f"✅ 导入 {len(collection_data['documents'])} 个文档到 {collection_name}")
+                # 检查集合数据结构
+                if not isinstance(collection_data, dict):
+                    logger.error(f"❌ 集合数据格式错误: {collection_name}")
+                    continue
+                
+                documents = collection_data.get('documents', [])
+                metadatas = collection_data.get('metadatas', [])
+                ids = collection_data.get('ids', [])
+                
+                if documents and len(documents) > 0:
+                    # 批量导入数据
+                    batch_size = 100  # 分批导入，避免内存问题
+                    for i in range(0, len(documents), batch_size):
+                        batch_docs = documents[i:i+batch_size]
+                        batch_metas = metadatas[i:i+batch_size] if metadatas else [{}] * len(batch_docs)
+                        batch_ids = ids[i:i+batch_size] if ids else [f"doc_{j}" for j in range(i, i+len(batch_docs))]
+                        
+                        collection.add(
+                            documents=batch_docs,
+                            metadatas=batch_metas,
+                            ids=batch_ids
+                        )
+                    
+                    total_imported += len(documents)
+                    logger.info(f"✅ 导入 {len(documents)} 个文档到 {collection_name}")
+                else:
+                    logger.warning(f"⚠️  集合 {collection_name} 没有文档数据")
                 
             except Exception as e:
                 logger.error(f"❌ 导入集合失败 {collection_name}: {e}")
+                continue
         
-        logger.info("✅ JSON数据导入完成")
+        logger.info(f"✅ JSON数据导入完成，总计导入 {total_imported} 个文档")
         return True
         
     except Exception as e:
