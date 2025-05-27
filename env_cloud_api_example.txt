@@ -1,0 +1,40 @@
+# 法院判例知识库 - 云端环境变量配置示例
+# 复制此文件为 .env 并填入实际的API密钥
+
+# ===========================================
+# LLM 配置（大模型分析功能）
+# ===========================================
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_API_KEY=your_openai_api_key_here
+LLM_MODEL_NAME=gpt-3.5-turbo
+
+# ===========================================
+# Embedding API 配置（语义搜索功能）
+# ===========================================
+# 使用OpenAI的embedding API
+EMBEDDING_API_URL=https://api.openai.com/v1/embeddings
+EMBEDDING_API_KEY=your_openai_api_key_here
+EMBEDDING_MODEL_NAME=text-embedding-ada-002
+
+# 或者使用其他兼容的embedding服务
+# EMBEDDING_API_URL=https://your-embedding-service.com/v1/embeddings
+# EMBEDDING_API_KEY=your_embedding_api_key
+# EMBEDDING_MODEL_NAME=your_embedding_model
+
+# ===========================================
+# Flask 配置
+# ===========================================
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5000
+FLASK_DEBUG=False
+
+# ===========================================
+# 数据库配置
+# ===========================================
+CHROMA_DATA_PATH=db/
+
+# ===========================================
+# 功能开关
+# ===========================================
+# 如果不配置embedding API，系统会自动降级到文本搜索
+# 如果不配置LLM API，大模型分析功能将被禁用 

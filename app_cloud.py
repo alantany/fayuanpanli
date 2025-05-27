@@ -44,6 +44,11 @@ LLM_API_URL = os.getenv("LLM_API_URL")
 LLM_API_KEY = os.getenv("LLM_API_KEY") 
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME")
 
+# Embedding API配置（新增）
+EMBEDDING_API_URL = os.getenv("EMBEDDING_API_URL")  # 如：https://api.openai.com/v1/embeddings
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY")  # 可以与LLM_API_KEY相同
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-ada-002")  # OpenAI默认模型
+
 # LLM配置检查
 LLM_ENABLED = all([LLM_API_URL, LLM_API_KEY, LLM_MODEL_NAME])
 if not LLM_ENABLED:
@@ -51,9 +56,15 @@ if not LLM_ENABLED:
 else:
     logger.info("LLM configuration loaded successfully")
 
+# Embedding配置检查
+EMBEDDING_API_ENABLED = all([EMBEDDING_API_URL, EMBEDDING_API_KEY])
+if not EMBEDDING_API_ENABLED:
+    logger.warning("Embedding API configuration missing. Will use ChromaDB default embedding.")
+else:
+    logger.info("Embedding API configuration loaded successfully")
+
 # 全局变量
 client = None
-embedding_model = None
 
 # 案例类型映射（与主应用保持一致）
 CASE_TYPES = {
@@ -80,25 +91,13 @@ else:
 
 def init_chromadb():
     """初始化ChromaDB客户端"""
-    global client, embedding_model
+    global client
     
     try:
         # 初始化ChromaDB客户端
         client = chromadb.PersistentClient(path="./db")
         logger.info("ChromaDB client initialized successfully")
         
-        # 初始化embedding模型（如果可用）
-        if EMBEDDING_AVAILABLE:
-            try:
-                # 使用轻量级的多语言模型
-                embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-                logger.info("Embedding model loaded successfully")
-            except Exception as e:
-                logger.warning(f"Failed to load embedding model: {e}")
-                embedding_model = None
-        else:
-            embedding_model = None
-            
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB: {e}")
         raise
@@ -217,6 +216,44 @@ def analyze_case_with_llm(case_document):
         logger.error(f"Unexpected error during LLM analysis: {str(e)}")
         return f"处理大模型分析时发生未知错误: {str(e)}"
 
+def get_embedding_from_api(text):
+    """使用云端API获取文本的embedding向量"""
+    if not EMBEDDING_API_ENABLED:
+        return None
+        
+    headers = {
+        "Authorization": f"Bearer {EMBEDDING_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": EMBEDDING_MODEL_NAME,
+        "input": text
+    }
+    
+    try:
+        response = requests.post(EMBEDDING_API_URL, headers=headers, json=data, timeout=30)
+        response.raise_for_status()
+        
+        result = response.json()
+        if 'data' in result and len(result['data']) > 0:
+            embedding = result['data'][0]['embedding']
+            logger.info(f"Successfully got embedding from API (dimension: {len(embedding)})")
+            return embedding
+        else:
+            logger.error("Invalid response format from embedding API")
+            return None
+            
+    except requests.exceptions.Timeout:
+        logger.error("Embedding API request timed out")
+        return None
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Embedding API HTTP error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error calling embedding API: {e}")
+        return None
+
 @app.route('/')
 def index():
     """主页"""
@@ -279,15 +316,24 @@ def search():
             }), 404
         
         # 执行搜索
-        if embedding_model is not None:
-            # 使用embedding模型进行向量搜索
-            logger.info("Using embedding model for vector search")
-            query_embedding = embedding_model.encode([query]).tolist()
-            results = collection.query(
-                query_embeddings=query_embedding,
-                n_results=1,
-                include=["documents", "metadatas", "distances"]
-            )
+        if EMBEDDING_API_ENABLED:
+            # 使用云端embedding API进行向量搜索
+            logger.info("Using cloud embedding API for vector search")
+            query_embedding = get_embedding_from_api(query)
+            if query_embedding is not None:
+                results = collection.query(
+                    query_embeddings=[query_embedding],  # 注意这里需要是列表
+                    n_results=1,
+                    include=["documents", "metadatas", "distances"]
+                )
+            else:
+                # 如果API调用失败，降级到文本搜索
+                logger.warning("Embedding API failed, falling back to text search")
+                results = collection.query(
+                    query_texts=[query],
+                    n_results=1,
+                    include=["documents", "metadatas", "distances"]
+                )
         else:
             # 使用ChromaDB默认的文本搜索
             logger.info("Using ChromaDB default text search")
