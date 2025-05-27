@@ -431,11 +431,25 @@ def keyword_search_in_collection(collection, query):
         all_data = collection.get(include=["documents", "metadatas"])
         
         if not all_data['documents']:
+            logger.warning("Collection is empty - no documents found")
             return results
+        
+        # 调试：查看数据库中的实际内容
+        logger.info(f"Database contains {len(all_data['documents'])} documents")
+        for i, doc in enumerate(all_data['documents'][:3]):  # 只显示前3个
+            metadata = all_data['metadatas'][i] if i < len(all_data['metadatas']) else {}
+            filename = metadata.get('filename', f'未知文件_{i}')
+            case_type = metadata.get('case_type', '未知类型')
+            doc_preview = doc[:100] + "..." if len(doc) > 100 else doc
+            logger.info(f"Document {i+1}: filename='{filename}', case_type='{case_type}', content_preview='{doc_preview}'")
         
         # 提取搜索关键词
         keywords = extract_keywords(query)
         logger.info(f"Extracted keywords: {keywords}")
+        
+        if not keywords:
+            logger.warning("No keywords extracted from query")
+            return results
         
         # 对每个文档计算相关性分数
         scored_docs = []
@@ -452,6 +466,7 @@ def keyword_search_in_collection(collection, query):
                     'score': score,
                     'distance': 1.0 - score  # 转换为距离（越小越相关）
                 })
+                logger.info(f"Document {i+1} scored {score:.3f}: {metadata.get('filename', 'unknown')}")
         
         # 按分数排序
         scored_docs.sort(key=lambda x: x['score'], reverse=True)
@@ -480,18 +495,20 @@ def extract_keywords(query):
     
     # 移除标点符号，分割成词
     clean_query = re.sub(r'[^\w\s]', ' ', query)
-    words = clean_query.split()
+    words = [word.strip() for word in clean_query.split() if word.strip()]
+    
+    logger.info(f"Split words: {words}")
     
     # 定义常见的法律关键词和产品类型
     legal_keywords = {
-        '婚姻': ['婚姻', '离婚', '夫妻', '配偶', '结婚'],
-        '合同': ['合同', '协议', '约定', '违约'],
-        '交通': ['交通', '车祸', '事故', '撞车', '肇事'],
-        '劳动': ['劳动', '工作', '雇佣', '员工', '工资'],
-        '房产': ['房产', '房屋', '买卖', '租赁', '物业'],
+        '婚姻': ['婚姻', '离婚', '夫妻', '配偶', '结婚', '婚姻纠纷', '离婚纠纷'],
+        '合同': ['合同', '协议', '约定', '违约', '合同纠纷'],
+        '交通': ['交通', '车祸', '事故', '撞车', '肇事', '交通事故'],
+        '劳动': ['劳动', '工作', '雇佣', '员工', '工资', '劳动纠纷', '劳动争议'],
+        '房产': ['房产', '房屋', '买卖', '租赁', '物业', '房产纠纷'],
         '刑事': ['刑事', '犯罪', '盗窃', '诈骗', '故意'],
-        '民事': ['民事', '纠纷', '争议', '赔偿'],
-        '行政': ['行政', '政府', '行政机关', '执法'],
+        '民事': ['民事', '纠纷', '争议', '赔偿', '民事纠纷'],
+        '行政': ['行政', '政府', '行政机关', '执法', '行政纠纷'],
         '执行': ['执行', '强制执行', '申请执行'],
         '国家赔偿': ['国家赔偿', '赔偿', '国家机关'],
         '健康': ['健康', '养生', '保健', '医疗', '药品'],
@@ -503,22 +520,26 @@ def extract_keywords(query):
     # 先提取基础词汇
     expanded_keywords = set()
     
-    # 添加原始词汇
+    # 添加原始词汇（过滤掉"案例"这样的通用词）
+    stop_words = {'案例', '案件', '纠纷案', '某某', '诉', '的', '了', '与', '和'}
     for word in words:
-        if len(word) >= 2:  # 只保留长度>=2的词
+        if len(word) >= 2 and word not in stop_words:
             expanded_keywords.add(word)
     
     # 扩展关键词 - 基于同义词
     for word in words:
         for category, synonyms in legal_keywords.items():
-            if word in synonyms:
+            if word in synonyms or any(synonym in word for synonym in synonyms):
                 expanded_keywords.update(synonyms)
+                logger.info(f"Expanded '{word}' with category '{category}': {synonyms}")
+                break  # 找到匹配就跳出
     
     # 特殊处理：提取复合关键词
     compound_terms = [
         '健康养生', '养生馆', '销售者责任', '产品责任', 
         '消费者权益', '产品质量', '销售合同',
-        '健康产品', '保健品', '纠纷案'
+        '健康产品', '保健品', '婚姻纠纷', '离婚纠纷',
+        '合同纠纷', '交通事故', '劳动争议'
     ]
     
     query_lower = query.lower()
@@ -527,13 +548,22 @@ def extract_keywords(query):
             expanded_keywords.add(term)
             # 也添加组成词
             for part in term.split():
-                if len(part) >= 2:
+                if len(part) >= 2 and part not in stop_words:
                     expanded_keywords.add(part)
+    
+    # 如果扩展后还是很少，手动添加一些
+    if len(expanded_keywords) < 3:
+        if '婚姻' in query_lower:
+            expanded_keywords.update(['婚姻', '离婚', '夫妻', '配偶', '结婚'])
+        elif '合同' in query_lower:
+            expanded_keywords.update(['合同', '协议', '违约'])
+        elif '交通' in query_lower:
+            expanded_keywords.update(['交通', '事故', '车祸'])
     
     # 记录提取的关键词用于调试
     keywords_list = list(expanded_keywords)
     logger.info(f"Original query: {query}")
-    logger.info(f"Extracted {len(keywords_list)} keywords: {keywords_list}")
+    logger.info(f"Final expanded keywords ({len(keywords_list)}): {keywords_list}")
     
     return keywords_list
 
