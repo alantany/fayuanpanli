@@ -514,36 +514,7 @@
                 copyButton.addEventListener('click', (event) => {
                     console.log('案例复制按钮被点击了'); // 调试日志
                     event.stopPropagation(); 
-                    
-                    // 检查是否支持clipboard API
-                    if (!navigator.clipboard) {
-                        console.error('浏览器不支持clipboard API');
-                        copyButton.textContent = '不支持'; 
-                        setTimeout(() => {
-                            copyButton.innerHTML = '&#x1F4CB;'; 
-                        }, 2000);
-                        return;
-                    }
-                    
-                    console.log('准备复制的案例内容:', textToCopy.substring(0, 100) + '...'); // 显示前100个字符
-                    
-                    navigator.clipboard.writeText(textToCopy)
-                        .then(() => {
-                            console.log('案例复制成功');
-                            copyButton.innerHTML = '&#x2714; 已复制'; 
-                            copyButton.classList.add('copied');
-                            setTimeout(() => {
-                                copyButton.innerHTML = '&#x1F4CB;'; 
-                                copyButton.classList.remove('copied');
-                            }, 2000); 
-                        })
-                        .catch(err => {
-                            console.error('案例复制失败: ', err);
-                            copyButton.textContent = '失败'; 
-                            setTimeout(() => {
-                                copyButton.innerHTML = '&#x1F4CB;'; 
-                            }, 2000);
-                        });
+                    copyToClipboard(textToCopy, copyButton, '已复制');
                 });
 
                 // Format and display the main case document content
@@ -621,36 +592,7 @@
                     copyLlmButton.addEventListener('click', (event) => {
                         console.log('LLM复制按钮被点击了'); // 调试日志
                         event.stopPropagation(); 
-                        
-                        // 检查是否支持clipboard API
-                        if (!navigator.clipboard) {
-                            console.error('浏览器不支持clipboard API');
-                            copyLlmButton.textContent = '不支持'; 
-                            setTimeout(() => {
-                                copyLlmButton.innerHTML = '&#x1F4CB;'; 
-                            }, 2000);
-                            return;
-                        }
-                        
-                        console.log('准备复制的内容:', data.analysis.substring(0, 100) + '...'); // 显示前100个字符
-                        
-                        navigator.clipboard.writeText(data.analysis) // Copy original analysis text without formatting
-                            .then(() => {
-                                console.log('复制成功');
-                                copyLlmButton.innerHTML = '&#x2714; 已复制'; 
-                                copyLlmButton.classList.add('copied');
-                                setTimeout(() => {
-                                    copyLlmButton.innerHTML = '&#x1F4CB;'; 
-                                    copyLlmButton.classList.remove('copied');
-                                }, 2000); 
-                            })
-                            .catch(err => {
-                                console.error('复制失败: ', err);
-                                copyLlmButton.textContent = '失败'; 
-                                setTimeout(() => {
-                                    copyLlmButton.innerHTML = '&#x1F4CB;'; 
-                                }, 2000);
-                            });
+                        copyToClipboard(data.analysis, copyLlmButton, '已复制');
                     });
                     
                     // Insert the analysis container after the main document's <pre> or where button was
@@ -725,6 +667,92 @@
                 handleSearch();
             }
         });
+
+        // 备用复制函数
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // 避免滚动到底部
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                return successful;
+            } catch (err) {
+                document.body.removeChild(textArea);
+                return false;
+            }
+        }
+
+        // 通用复制函数
+        function copyToClipboard(text, button, successMessage = '已复制') {
+            console.log('开始复制文本:', text.substring(0, 100) + '...');
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                // 使用现代clipboard API
+                return navigator.clipboard.writeText(text)
+                    .then(() => {
+                        console.log('使用clipboard API复制成功');
+                        button.innerHTML = `&#x2714; ${successMessage}`;
+                        button.classList.add('copied');
+                        setTimeout(() => {
+                            button.innerHTML = '&#x1F4CB;';
+                            button.classList.remove('copied');
+                        }, 2000);
+                        return true;
+                    })
+                    .catch(err => {
+                        console.error('clipboard API复制失败:', err);
+                        // 尝试备用方法
+                        const success = fallbackCopyTextToClipboard(text);
+                        if (success) {
+                            console.log('使用备用方法复制成功');
+                            button.innerHTML = `&#x2714; ${successMessage}`;
+                            button.classList.add('copied');
+                            setTimeout(() => {
+                                button.innerHTML = '&#x1F4CB;';
+                                button.classList.remove('copied');
+                            }, 2000);
+                        } else {
+                            console.error('备用方法也失败了');
+                            button.textContent = '失败';
+                            setTimeout(() => {
+                                button.innerHTML = '&#x1F4CB;';
+                            }, 2000);
+                        }
+                        return success;
+                    });
+            } else {
+                // 直接使用备用方法
+                console.log('使用备用复制方法');
+                const success = fallbackCopyTextToClipboard(text);
+                if (success) {
+                    console.log('备用方法复制成功');
+                    button.innerHTML = `&#x2714; ${successMessage}`;
+                    button.classList.add('copied');
+                    setTimeout(() => {
+                        button.innerHTML = '&#x1F4CB;';
+                        button.classList.remove('copied');
+                    }, 2000);
+                } else {
+                    console.error('备用方法复制失败');
+                    button.textContent = '失败';
+                    setTimeout(() => {
+                        button.innerHTML = '&#x1F4CB;';
+                    }, 2000);
+                }
+                return Promise.resolve(success);
+            }
+        }
 
     </script>
 </body>
