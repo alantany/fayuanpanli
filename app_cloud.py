@@ -11,6 +11,7 @@ from flask import Flask, render_template, request, jsonify
 import chromadb
 import requests
 from pypinyin import pinyin, Style
+from chromadb.config import Settings
 
 # 加载环境变量
 try:
@@ -52,6 +53,7 @@ else:
 
 # 全局变量
 client = None
+embedding_model = None
 
 # 案例类型映射（与主应用保持一致）
 CASE_TYPES = {
@@ -62,23 +64,38 @@ CASE_TYPES = {
     "国家赔偿案例": "国家赔偿案例"
 }
 
+# 添加embedding支持
+try:
+    from sentence_transformers import SentenceTransformer
+    EMBEDDING_AVAILABLE = True
+except ImportError:
+    EMBEDDING_AVAILABLE = False
+    print("Warning: sentence-transformers not available, using ChromaDB default embedding")
+
 def init_chromadb():
     """初始化ChromaDB客户端"""
-    global client
+    global client, embedding_model
     
-    if client is None:
-        logger.info("Initializing ChromaDB client...")
-        try:
-            client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
-            logger.info("ChromaDB client initialized successfully")
+    try:
+        # 初始化ChromaDB客户端
+        client = chromadb.PersistentClient(path="./chroma_db")
+        logger.info("ChromaDB client initialized successfully")
+        
+        # 初始化embedding模型（如果可用）
+        if EMBEDDING_AVAILABLE:
+            try:
+                # 使用轻量级的多语言模型
+                embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+                logger.info("Embedding model loaded successfully")
+            except Exception as e:
+                logger.warning(f"Failed to load embedding model: {e}")
+                embedding_model = None
+        else:
+            embedding_model = None
             
-            # 列出可用的集合
-            collections = client.list_collections()
-            logger.info(f"Available collections: {[c.name for c in collections]}")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
-            raise
+    except Exception as e:
+        logger.error(f"Failed to initialize ChromaDB: {e}")
+        raise
 
 def get_clean_collection_name(case_type_folder_name_raw):
     """生成清理过的集合名称（与向量化脚本保持一致）"""
@@ -255,13 +272,24 @@ def search():
                 "results": []
             }), 404
         
-        # 注意：这里我们直接使用查询文本，依赖ChromaDB的内置embedding
-        # 因为数据是用相同embedding模型存储的，查询时ChromaDB会自动处理
-        results = collection.query(
-            query_texts=[query],
-            n_results=1,
-            include=["documents", "metadatas", "distances"]
-        )
+        # 执行搜索
+        if embedding_model is not None:
+            # 使用embedding模型进行向量搜索
+            logger.info("Using embedding model for vector search")
+            query_embedding = embedding_model.encode([query]).tolist()
+            results = collection.query(
+                query_embeddings=query_embedding,
+                n_results=1,
+                include=["documents", "metadatas", "distances"]
+            )
+        else:
+            # 使用ChromaDB默认的文本搜索
+            logger.info("Using ChromaDB default text search")
+            results = collection.query(
+                query_texts=[query],
+                n_results=1,
+                include=["documents", "metadatas", "distances"]
+            )
         
         # 处理搜索结果
         formatted_results = []
