@@ -512,9 +512,24 @@
 
                 // Add event listener to the copy button
                 copyButton.addEventListener('click', (event) => {
+                    console.log('案例复制按钮被点击了'); // 调试日志
                     event.stopPropagation(); 
+                    
+                    // 检查是否支持clipboard API
+                    if (!navigator.clipboard) {
+                        console.error('浏览器不支持clipboard API');
+                        copyButton.textContent = '不支持'; 
+                        setTimeout(() => {
+                            copyButton.innerHTML = '&#x1F4CB;'; 
+                        }, 2000);
+                        return;
+                    }
+                    
+                    console.log('准备复制的案例内容:', textToCopy.substring(0, 100) + '...'); // 显示前100个字符
+                    
                     navigator.clipboard.writeText(textToCopy)
                         .then(() => {
+                            console.log('案例复制成功');
                             copyButton.innerHTML = '&#x2714; 已复制'; 
                             copyButton.classList.add('copied');
                             setTimeout(() => {
@@ -523,7 +538,7 @@
                             }, 2000); 
                         })
                         .catch(err => {
-                            console.error('无法复制文本: ', err);
+                            console.error('案例复制失败: ', err);
                             copyButton.textContent = '失败'; 
                             setTimeout(() => {
                                 copyButton.innerHTML = '&#x1F4CB;'; 
@@ -604,9 +619,24 @@
 
                     // Add event listener to the copy button for LLM analysis
                     copyLlmButton.addEventListener('click', (event) => {
+                        console.log('LLM复制按钮被点击了'); // 调试日志
                         event.stopPropagation(); 
+                        
+                        // 检查是否支持clipboard API
+                        if (!navigator.clipboard) {
+                            console.error('浏览器不支持clipboard API');
+                            copyLlmButton.textContent = '不支持'; 
+                            setTimeout(() => {
+                                copyLlmButton.innerHTML = '&#x1F4CB;'; 
+                            }, 2000);
+                            return;
+                        }
+                        
+                        console.log('准备复制的内容:', data.analysis.substring(0, 100) + '...'); // 显示前100个字符
+                        
                         navigator.clipboard.writeText(data.analysis) // Copy original analysis text without formatting
                             .then(() => {
+                                console.log('复制成功');
                                 copyLlmButton.innerHTML = '&#x2714; 已复制'; 
                                 copyLlmButton.classList.add('copied');
                                 setTimeout(() => {
@@ -615,7 +645,7 @@
                                 }, 2000); 
                             })
                             .catch(err => {
-                                console.error('无法复制文本: ', err);
+                                console.error('复制失败: ', err);
                                 copyLlmButton.textContent = '失败'; 
                                 setTimeout(() => {
                                     copyLlmButton.innerHTML = '&#x1F4CB;'; 
