@@ -357,6 +357,10 @@ def search_in_collection(collection, query):
     results = []
     
     try:
+        # 暂时禁用向量搜索，直接使用关键词搜索进行测试
+        logger.info("Force using keyword search for testing")
+        return keyword_search_in_collection(collection, query)
+        
         # 方法1: 尝试向量搜索（如果embedding API可用）
         if EMBEDDING_API_ENABLED:
             try:
@@ -478,7 +482,7 @@ def extract_keywords(query):
     clean_query = re.sub(r'[^\w\s]', ' ', query)
     words = clean_query.split()
     
-    # 定义常见的法律关键词
+    # 定义常见的法律关键词和产品类型
     legal_keywords = {
         '婚姻': ['婚姻', '离婚', '夫妻', '配偶', '结婚'],
         '合同': ['合同', '协议', '约定', '违约'],
@@ -489,17 +493,49 @@ def extract_keywords(query):
         '民事': ['民事', '纠纷', '争议', '赔偿'],
         '行政': ['行政', '政府', '行政机关', '执法'],
         '执行': ['执行', '强制执行', '申请执行'],
-        '国家赔偿': ['国家赔偿', '赔偿', '国家机关']
+        '国家赔偿': ['国家赔偿', '赔偿', '国家机关'],
+        '健康': ['健康', '养生', '保健', '医疗', '药品'],
+        '销售': ['销售', '买卖', '购买', '消费者'],
+        '产品': ['产品', '商品', '货物'],
+        '责任': ['责任', '赔偿', '损害']
     }
     
-    # 扩展关键词
-    expanded_keywords = set(words)
+    # 先提取基础词汇
+    expanded_keywords = set()
+    
+    # 添加原始词汇
+    for word in words:
+        if len(word) >= 2:  # 只保留长度>=2的词
+            expanded_keywords.add(word)
+    
+    # 扩展关键词 - 基于同义词
     for word in words:
         for category, synonyms in legal_keywords.items():
             if word in synonyms:
                 expanded_keywords.update(synonyms)
     
-    return list(expanded_keywords)
+    # 特殊处理：提取复合关键词
+    compound_terms = [
+        '健康养生', '养生馆', '销售者责任', '产品责任', 
+        '消费者权益', '产品质量', '销售合同',
+        '健康产品', '保健品', '纠纷案'
+    ]
+    
+    query_lower = query.lower()
+    for term in compound_terms:
+        if term in query_lower:
+            expanded_keywords.add(term)
+            # 也添加组成词
+            for part in term.split():
+                if len(part) >= 2:
+                    expanded_keywords.add(part)
+    
+    # 记录提取的关键词用于调试
+    keywords_list = list(expanded_keywords)
+    logger.info(f"Original query: {query}")
+    logger.info(f"Extracted {len(keywords_list)} keywords: {keywords_list}")
+    
+    return keywords_list
 
 def calculate_keyword_score(document, metadata, keywords, original_query):
     """计算文档的关键词匹配分数"""
