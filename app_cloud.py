@@ -249,7 +249,7 @@ def search():
         # 因为数据是用相同embedding模型存储的，查询时ChromaDB会自动处理
         results = collection.query(
             query_texts=[query],
-            n_results=3,
+            n_results=1,
             include=["documents", "metadatas", "distances"]
         )
         
