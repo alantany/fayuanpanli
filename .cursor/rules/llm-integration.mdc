@@ -1,0 +1,47 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# LLM集成架构说明
+
+## LLM配置
+项目通过OpenRouter API集成DeepSeek模型进行案例分析。
+
+### 环境变量配置 ([.env](mdc:.env))
+```
+LLM_API_URL=https://openrouter.ai/api/v1/chat/completions
+LLM_API_KEY=sk-or-v1-xxx...
+LLM_MODEL_NAME=deepseek/deepseek-r1:free
+```
+
+## API架构
+
+### 后端路由 ([app.py](mdc:app.py))
+- **`/search` (POST)**: 向量搜索案例，返回案例原文（不包含LLM分析）
+- **`/analyze_case_llm` (POST)**: 接收案例文档，调用LLM进行分析
+
+### 前端交互 ([templates/index.html](mdc:templates/index.html))
+1. 用户搜索 → 显示案例原文
+2. 用户点击"大模型分析"按钮 → 异步调用LLM API
+3. 动态显示格式化的分析结果
+
+## LLM分析流程
+1. **输入**: 完整的案例文档文本
+2. **提示工程**: 要求分析案情摘要、争议焦点、裁判理由等
+3. **输出处理**: 
+   - 移除Markdown格式符号(`**`)
+   - 识别并高亮标题(`###`, `####`)
+   - 应用段落缩进
+   - 保持与案例原文一致的字体样式
+
+## 错误处理
+- LLM服务不可用时显示友好错误信息
+- 支持重试机制
+- 超时处理（90秒）
+- 网络错误捕获
+
+## 性能考虑
+- 按需加载：只有用户主动请求时才调用LLM
+- 异步处理：避免阻塞用户界面
+- 错误恢复：失败后可重新尝试分析

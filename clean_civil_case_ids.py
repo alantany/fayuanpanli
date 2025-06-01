@@ -61,7 +61,7 @@ if __name__ == "__main__":
     # and "民事案例" is a subdirectory.
     
     workspace_dir = os.getcwd() 
-    directory_name = "民事案例"
+    directory_name = "指导案"
     file_name = "all_cases.txt"
     
     # Correctly join paths for the target directory and file

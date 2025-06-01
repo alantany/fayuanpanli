@@ -1,0 +1,32 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 项目文件结构说明
+
+## 核心应用文件
+- **[app.py](mdc:app.py)**: Flask后端主应用，包含搜索API和LLM分析API
+- **[templates/index.html](mdc:templates/index.html)**: 前端用户界面，支持案例搜索和LLM分析
+- **[requirements.txt](mdc:requirements.txt)**: Python依赖包列表
+- **[.env](mdc:.env)**: 环境变量配置文件（包含LLM API配置）
+
+## 数据处理脚本
+- **[vectorize_and_store.py](mdc:vectorize_and_store.py)**: 向量化案例文档并存储到ChromaDB
+- **[extract_cases.py](mdc:extract_cases.py)**: 从大文件中分割独立案例
+- **[clean_single_all_cases_file.py](mdc:clean_single_all_cases_file.py)**: 清理文本文件中的无关信息
+- **[clean_guiding_cases.py](mdc:clean_guiding_cases.py)**: 清理特定案例文件
+
+## 数据目录
+- **民事案例/**, **刑事案例/**, **行政案例/**, **执行案例/**, **国家赔偿案例/**: 各类案例的源文件和处理后的案例文件
+- **db/**: ChromaDB持久化数据存储目录，包含chroma.sqlite3（通过Git LFS追踪）
+
+## 配置文件
+- **[PROJECT_DOCUMENTATION.md](mdc:PROJECT_DOCUMENTATION.md)**: 完整的项目文档
+- **[.gitignore](mdc:.gitignore)**: Git忽略文件配置
+- **[.gitattributes](mdc:.gitattributes)**: Git LFS配置
+
+## 重要说明
+- 所有案例数据已预处理并向量化存储
+- 大模型配置存储在.env文件中，不提交到版本控制
+- 使用Git LFS管理大型数据库文件
