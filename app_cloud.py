@@ -87,9 +87,20 @@ else:
         from sentence_transformers import SentenceTransformer
         EMBEDDING_AVAILABLE = True
         print("Sentence transformers available for vector search")
-    except ImportError:
+        logger.info("Sentence transformers library imported successfully")
+    except ImportError as e:
         EMBEDDING_AVAILABLE = False
-        print("Warning: sentence-transformers not available, using ChromaDB default embedding")
+        print(f"Warning: sentence-transformers not available: {e}")
+        logger.warning(f"Sentence transformers import failed: {e}")
+    except Exception as e:
+        EMBEDDING_AVAILABLE = False
+        print(f"Warning: unexpected error importing sentence-transformers: {e}")
+        logger.error(f"Unexpected error importing sentence-transformers: {e}")
+
+# 添加调试信息
+print(f"ENABLE_VECTOR_SEARCH: {ENABLE_VECTOR_SEARCH}")
+print(f"EMBEDDING_AVAILABLE: {EMBEDDING_AVAILABLE}")
+print(f"FORCE_DISABLE_EMBEDDING: {FORCE_DISABLE_EMBEDDING}")
 
 # 轻量级embedding模型配置
 LIGHTWEIGHT_EMBEDDING_MODEL = "all-MiniLM-L4-v2"  # 约80MB，适合1C2G环境
@@ -362,6 +373,9 @@ def search_in_collection(collection, query):
     results = []
     
     try:
+        # 调试信息
+        logger.info(f"Search method check: ENABLE_VECTOR_SEARCH={ENABLE_VECTOR_SEARCH}, EMBEDDING_AVAILABLE={EMBEDDING_AVAILABLE}")
+        
         # 优先使用向量搜索（如果启用且可用）
         if ENABLE_VECTOR_SEARCH and EMBEDDING_AVAILABLE:
             try:
@@ -550,9 +564,27 @@ def extract_keywords(query):
     """从查询中提取关键词"""
     import re
     
+    # 改进分词逻辑，支持中文分词
     # 移除标点符号，分割成词
     clean_query = re.sub(r'[^\w\s]', ' ', query)
-    words = [word.strip() for word in clean_query.split() if word.strip()]
+    
+    # 中文分词：按字符分割，然后组合有意义的词组
+    words = []
+    for word in clean_query.split():
+        word = word.strip()
+        if word:
+            # 对于中文，按字符分割
+            if re.search(r'[\u4e00-\u9fff]', word):
+                # 中文词，按字符分割
+                chars = list(word)
+                # 组合2-4个字符的词组
+                for i in range(len(chars)):
+                    for j in range(i+2, min(i+5, len(chars)+1)):
+                        if j-i >= 2:
+                            words.append(''.join(chars[i:j]))
+            else:
+                # 英文词，直接添加
+                words.append(word)
     
     logger.info(f"Split words: {words}")
     
@@ -563,7 +595,7 @@ def extract_keywords(query):
         '交通': ['交通', '车祸', '事故', '撞车', '肇事', '交通事故'],
         '劳动': ['劳动', '工作', '雇佣', '员工', '工资', '劳动纠纷', '劳动争议'],
         '房产': ['房产', '房屋', '买卖', '租赁', '物业', '房产纠纷'],
-        '刑事': ['刑事', '犯罪', '盗窃', '诈骗', '故意'],
+        '刑事': ['刑事', '犯罪', '盗窃', '诈骗', '故意', '正当防卫', '防卫过当', '故意伤害', '故意杀人', '抢劫', '强奸', '猥亵', '贪污', '受贿', '挪用公款'],
         '民事': ['民事', '纠纷', '争议', '赔偿', '民事纠纷'],
         '行政': ['行政', '政府', '行政机关', '执法', '行政纠纷'],
         '执行': ['执行', '强制执行', '申请执行'],
@@ -578,7 +610,7 @@ def extract_keywords(query):
     expanded_keywords = set()
     
     # 添加原始词汇（过滤掉"案例"这样的通用词）
-    stop_words = {'案例', '案件', '纠纷案', '某某', '诉', '的', '了', '与', '和'}
+    stop_words = {'案例', '案件', '纠纷案', '某某', '诉', '的', '了', '与', '和', '找', '一篇', '一个', '这个', '那个', '什么', '怎么', '如何', '为什么', '因为', '所以', '但是', '然后', '最后', '首先', '其次', '再次', '另外', '还有', '以及', '或者', '还是', '不是', '没有', '可以', '应该', '必须', '需要', '想要', '希望', '觉得', '认为', '知道', '了解', '明白', '清楚', '详细', '具体', '一般', '通常', '经常', '总是', '从不', '很少', '有时', '偶尔', '经常', '总是', '从不', '很少', '有时', '偶尔'}
     for word in words:
         if len(word) >= 2 and word not in stop_words:
             expanded_keywords.add(word)
@@ -616,6 +648,14 @@ def extract_keywords(query):
             expanded_keywords.update(['合同', '协议', '违约'])
         elif '交通' in query_lower:
             expanded_keywords.update(['交通', '事故', '车祸'])
+        elif '正当防卫' in query_lower:
+            expanded_keywords.update(['正当防卫', '防卫', '防卫过当', '故意伤害', '故意杀人', '刑事'])
+        elif '防卫' in query_lower:
+            expanded_keywords.update(['正当防卫', '防卫', '防卫过当', '故意伤害', '故意杀人', '刑事'])
+        elif '伤害' in query_lower:
+            expanded_keywords.update(['故意伤害', '伤害', '正当防卫', '防卫过当', '刑事'])
+        elif '杀人' in query_lower:
+            expanded_keywords.update(['故意杀人', '杀人', '正当防卫', '防卫过当', '刑事'])
     
     # 记录提取的关键词用于调试
     keywords_list = list(expanded_keywords)
