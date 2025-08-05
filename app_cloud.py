@@ -77,6 +77,7 @@ CASE_TYPES = {
 
 # 添加embedding支持
 FORCE_DISABLE_EMBEDDING = os.getenv("FORCE_DISABLE_EMBEDDING", "False").lower() == "true"
+ENABLE_VECTOR_SEARCH = os.getenv("ENABLE_VECTOR_SEARCH", "true").lower() == "true"
 
 if FORCE_DISABLE_EMBEDDING:
     EMBEDDING_AVAILABLE = False
@@ -85,9 +86,13 @@ else:
     try:
         from sentence_transformers import SentenceTransformer
         EMBEDDING_AVAILABLE = True
+        print("Sentence transformers available for vector search")
     except ImportError:
         EMBEDDING_AVAILABLE = False
         print("Warning: sentence-transformers not available, using ChromaDB default embedding")
+
+# 轻量级embedding模型配置
+LIGHTWEIGHT_EMBEDDING_MODEL = "all-MiniLM-L4-v2"  # 约80MB，适合1C2G环境
 
 def init_chromadb():
     """初始化ChromaDB客户端"""
@@ -342,7 +347,7 @@ def search():
         # 按相关性排序（距离越小越相关）
         all_results.sort(key=lambda x: x.get('distance', float('inf')))
         
-        # 取最相关的结果
+        # 取最相关的结果（与本地版本保持一致）
         formatted_results = all_results[:1] if all_results else []
         
         logger.info(f"Found {len(formatted_results)} results")
@@ -357,11 +362,19 @@ def search_in_collection(collection, query):
     results = []
     
     try:
-        # 暂时禁用向量搜索，直接使用关键词搜索进行测试
-        logger.info("Force using keyword search for testing")
+        # 优先使用向量搜索（如果启用且可用）
+        if ENABLE_VECTOR_SEARCH and EMBEDDING_AVAILABLE:
+            try:
+                logger.info("Attempting lightweight vector search")
+                return lightweight_vector_search(collection, query)
+            except Exception as e:
+                logger.warning(f"Lightweight vector search failed: {e}, falling back to keyword search")
+        
+        # 备用关键词搜索
+        logger.info("Using keyword search")
         return keyword_search_in_collection(collection, query)
         
-        # 方法1: 尝试向量搜索（如果embedding API可用）
+        # 保留原有的API搜索逻辑作为备选
         if EMBEDDING_API_ENABLED:
             try:
                 logger.info("Attempting vector search with cloud embedding API")
@@ -421,6 +434,50 @@ def search_in_collection(collection, query):
     except Exception as e:
         logger.error(f"All search methods failed in collection: {e}")
         return []
+
+def lightweight_vector_search(collection, query):
+    """使用轻量级embedding模型进行向量搜索"""
+    results = []
+    
+    try:
+        # 延迟初始化embedding模型
+        if not hasattr(lightweight_vector_search, 'model'):
+            logger.info(f"Loading lightweight embedding model: {LIGHTWEIGHT_EMBEDDING_MODEL}")
+            lightweight_vector_search.model = SentenceTransformer(LIGHTWEIGHT_EMBEDDING_MODEL)
+            logger.info("Lightweight embedding model loaded successfully")
+        
+        # 生成查询向量
+        query_embedding = lightweight_vector_search.model.encode([query])[0]
+        
+        # 执行向量搜索
+        search_results = collection.query(
+            query_embeddings=[query_embedding.tolist()],
+            n_results=3,  # 减少结果数量以节省资源
+            include=["documents", "metadatas", "distances"]
+        )
+        
+        if search_results['documents'] and search_results['documents'][0]:
+            for i, doc in enumerate(search_results['documents'][0]):
+                metadata = search_results['metadatas'][0][i] if search_results['metadatas'][0] else {}
+                distance = search_results['distances'][0][i] if search_results['distances'][0] else 0
+                
+                results.append({
+                    'filename': metadata.get('filename', f'案例_{i+1}.txt'),
+                    'document': doc,
+                    'distance': distance,
+                    'case_type': metadata.get('case_type', '未知类型'),
+                    'search_method': 'lightweight_vector'
+                })
+            
+            logger.info(f"Lightweight vector search found {len(results)} results")
+            return results
+        else:
+            logger.warning("No results from lightweight vector search")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Lightweight vector search failed: {e}")
+        raise
 
 def keyword_search_in_collection(collection, query):
     """在集合中进行关键词搜索"""

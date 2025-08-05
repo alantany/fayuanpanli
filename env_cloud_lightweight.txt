@@ -1,0 +1,28 @@
+# 法院判例知识库 - 轻量级云端部署环境变量模板
+# 复制此文件为 .env 并填入实际值
+
+# Flask应用配置
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5000
+FLASK_DEBUG=False
+
+# ChromaDB配置
+CHROMA_DATA_PATH=./db
+
+# 搜索配置
+ENABLE_VECTOR_SEARCH=true
+FORCE_DISABLE_EMBEDDING=false
+
+# 大模型配置（可选）
+LLM_API_KEY=your_llm_api_key_here
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL_NAME=gpt-3.5-turbo
+
+# Embedding API配置（可选，用于备用）
+EMBEDDING_API_KEY=your_embedding_api_key_here
+EMBEDDING_API_URL=https://api.openai.com/v1/embeddings
+EMBEDDING_MODEL_NAME=text-embedding-ada-002
+
+# 性能调优
+BATCH_SIZE=5
+MEMORY_LIMIT=1500 
